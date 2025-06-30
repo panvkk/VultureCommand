@@ -1,0 +1,461 @@
+#include "mainwindow.h"
+#include "ui_mainwindow.h"
+#include <QFile>
+#include <QTextStream>
+#include <QDir>
+#include <QPropertyAnimation>
+#include <QRegularExpression>
+#include <cmath>
+#include <QMessageBox>
+#include <QTimer>
+#include <ctime>
+#include <QRandomGenerator>
+
+using namespace std;
+
+MainWindow::MainWindow(QWidget* parent)
+    : QMainWindow(parent)
+    , m_ui(new Ui::MainWindow)
+    , m_longestWordLabel(nullptr)
+    , m_currentRhymeWordLabel(nullptr)
+    , m_nextWordButton(nullptr)
+    , m_rhymeTimer(nullptr)
+    , m_currentIndex(0)
+    , m_currentWordIndex(0)
+    , m_rhymeRunning(false)
+    , m_firstTime(true)
+    , m_longestWordShowed(false)
+    , m_highlightedLabel(nullptr)
+
+{
+    m_ui->setupUi(this);
+    InitializeComponents();
+}
+
+MainWindow::~MainWindow()
+{
+    delete m_ui;
+    delete m_rhymeTimer;
+}
+
+void MainWindow::InitializeComponents()
+{
+    QRandomGenerator::securelySeeded();
+    srand(time(0));
+    SetupCurrentRhymeWordLabel();
+    QVector<QString> rhymes = LoadRhymes("schitalki.txt");
+    m_persons = LoadPhotos("photos");
+    if (!InitializeGame(rhymes)) return;
+    SetupRhymeTimer();
+}
+
+void MainWindow::SetupCurrentRhymeWordLabel()
+{
+    m_currentRhymeWordLabel = new QLabel(this);
+    m_currentRhymeWordLabel->setAlignment(Qt::AlignCenter);
+    m_currentRhymeWordLabel->setFont(QFont("TimesNewRoman", 14));
+    m_currentRhymeWordLabel->move(-25, height() / 2);
+    m_currentRhymeWordLabel->setFixedSize(width(), 30);
+    m_currentRhymeWordLabel->hide();
+}
+
+bool MainWindow::InitializeGame(const QVector<QString>& rhymes)
+{
+    random_device rd;
+    mt19937 g(rd());
+    shuffle(m_persons.begin(), m_persons.end(), g);
+    if (m_persons.isEmpty() || rhymes.isEmpty()) { ShowErrorMessage(); return false; }
+    m_currentIndex = rand() % m_persons.size();
+    DisplayPhotosInCircle(m_persons, m_firstTime);
+    m_firstTime = false;
+    QString rhyme = SelectRandomRhyme(rhymes);
+    m_rhymeWords = rhyme.split(' ');
+    InitializeLongestWordLabel(rhyme);
+    return true;
+}
+
+void MainWindow::ShowErrorMessage()
+{
+    QMessageBox::critical(this, "Ошибка","\nПроверьте:\n1. Файл 'schitalki.txt';\n2. Папку 'photos';");
+    QTimer::singleShot(0, this, &QCoreApplication::quit);
+}
+
+void MainWindow::InitializeLongestWordLabel(const QString& rhyme)
+{
+    m_longestWordLabel = new QLabel(this);
+    m_longestWordLabel->setObjectName("longestWordLabel");
+    m_longestWordLabel->setFont(QFont("TimesNewRoman", 8));
+    m_longestWordLabel->setText("Самое длинное слово: " + FindLongestWord(rhyme));
+    m_longestWordLabel->setAlignment(Qt::AlignLeft);
+    m_longestWordLabel->setFixedSize(width(), 20);
+    m_longestWordLabel->hide();
+}
+
+void MainWindow::SetupRhymeTimer()
+{
+    m_rhymeTimer = new QTimer(this);
+    connect(m_rhymeTimer, &QTimer::timeout, this, &MainWindow::UpdateRhymeWord);
+    connect(m_ui->nextWordButton, &QPushButton::clicked, this, &MainWindow::OnNextWordButtonClicked);
+}
+
+QVector<QString> MainWindow::LoadRhymes(const QString& filePath)
+{
+    QVector<QString> rhymes;
+    QFile file(filePath);
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
+        QTextStream in(&file);
+        while (!in.atEnd())
+        {
+            QString line = in.readLine().remove(QRegularExpression("[,.-_;:!?]")).trimmed();
+            if (!line.isEmpty()) rhymes.append(line);
+        }
+        file.close();
+    }
+    return rhymes;
+}
+
+QList<Person> MainWindow::LoadPhotos(const QString& folderPath)
+{
+    QList<Person> persons;
+    QDir dir(folderPath);
+    QStringList filters = { "*.png", "*.jpg", "*.jpeg", "*.HEIC" };
+    QFileInfoList fileList = dir.entryInfoList(filters, QDir::Files);
+    for (const QFileInfo& fileInfo : fileList)
+    {
+        QPixmap pixmap(fileInfo.absoluteFilePath());
+        if (!pixmap.isNull()) persons.append(Person(fileInfo.baseName(), pixmap));
+    }
+    return persons;
+}
+
+void MainWindow::DisplayPhotosInCircle(const QList<Person>& persons, bool firstTime)
+{
+    QList<QLabel*> photoLabels = findChildren<QLabel*>(QRegularExpression(".+_photo$"));
+    QList<QLabel*> nameLabels = findChildren<QLabel*>(QRegularExpression(".+_name$"));
+    QList<QLabel*> rhymeLabels = findChildren<QLabel*>(QRegularExpression(".+_rhyme$"));
+    int centerX = width() / 2 - 75;
+    int centerY = height() / 2 - 50;
+    int radius = sqrt(pow(centerX, 2) + pow(centerY, 2)) / 2 + 30;
+    int count = persons.size();
+    if (firstTime)  for (int i = 0; i < count; ++i) CreatePersonWidget(persons[i], i, count, centerX, centerY, radius);
+    else AnimateExistingWidgets(persons, centerX, centerY, radius, count);
+}
+
+void MainWindow::AnimateExistingWidgets(const QList<Person>& persons, int centerX, int centerY, int radius, int count)
+{
+    for (int i = 0; i < count; ++i)
+    {
+        double angle = (2 * M_PI / count) * i;
+        int x = centerX + radius * cos(angle);
+        int y = centerY + radius * sin(angle);
+        AnimatePersonWidgets(persons[i], x, y);
+    }
+}
+
+void MainWindow::AnimatePersonWidgets(const Person& person, int x, int y)
+{
+    QLabel* photoLabel = findChild<QLabel*>(person.name + "_photo");
+    QLabel* nameLabel = findChild<QLabel*>(person.name + "_name");
+    QLabel* rhymeLabel = findChild<QLabel*>(person.name + "_rhyme");
+    AnimateWidget(photoLabel, QPoint(x+25, y-25));
+    AnimateWidget(nameLabel, QPoint(x+25, y+75));
+    AnimateWidget(rhymeLabel, QPoint(x+25, y+90));
+}
+
+void MainWindow::AnimateWidget(QLabel* widget, const QPoint& endPos)
+{
+    if (widget)
+    {
+        QPropertyAnimation* anim = new QPropertyAnimation(widget, "pos");
+        anim->setDuration(800);
+        anim->setEasingCurve(QEasingCurve::InOutQuad);
+        anim->setEndValue(endPos);
+        anim->start(QAbstractAnimation::DeleteWhenStopped);
+    }
+}
+
+void MainWindow::CreatePersonWidget(const Person& person, int index, int count, int centerX, int centerY, int radius)
+{
+    double angle = (2 * M_PI / count) * index;
+    int x = centerX + radius * cos(angle);
+    int y = centerY + radius * sin(angle);
+    QLabel* photoLabel = CreatePhotoLabel(person);
+    QLabel* nameLabel = CreateNameLabel(person);
+    QLabel* rhymeLabel = CreateRhymeLabel(person);
+    SetupPersonAnimations(photoLabel, nameLabel, rhymeLabel, x, y);
+}
+
+QLabel* MainWindow::CreatePhotoLabel(const Person& person)
+{
+    QLabel* photoLabel = new QLabel(this);
+    photoLabel->setPixmap(person.photo.scaledToWidth(100, Qt::SmoothTransformation));
+    photoLabel->setObjectName(person.name + "_photo");
+    photoLabel->setGeometry(width()/2-50, height()/2-50, 100, 100);
+    photoLabel->show();
+    return photoLabel;
+}
+
+QLabel* MainWindow::CreateNameLabel(const Person& person)
+{
+    QLabel* nameLabel = new QLabel(person.name, this);
+    nameLabel->setFont(QFont("TimesNewRoman", 10));
+    nameLabel->setStyleSheet("color:black; font-weight: bold;");
+    nameLabel->setAlignment(Qt::AlignLeft);
+    nameLabel->setObjectName(person.name + "_name");
+    nameLabel->setGeometry(width()/2-50, height()/2+50, 200, 20);
+    nameLabel->show();
+    return nameLabel;
+}
+
+QLabel* MainWindow::CreateRhymeLabel(const Person& person)
+{
+    QLabel* rhymeLabel = new QLabel(this);
+    rhymeLabel->setAlignment(Qt::AlignLeft);
+    rhymeLabel->setFont(QFont("TimesNewRoman", 10));
+    rhymeLabel->setObjectName(person.name + "_rhyme");
+    rhymeLabel->setGeometry(width()/2-50, height()/2+65, 200, 20);
+    rhymeLabel->hide();
+    return rhymeLabel;
+}
+
+void MainWindow::SetupPersonAnimations(QLabel* photoLabel, QLabel* nameLabel, QLabel* rhymeLabel, int x, int y)
+{
+    AnimateWithEffect(photoLabel, QPoint(x, y));
+    AnimateWithEffect(nameLabel, QPoint(x, y + 100));
+    AnimateWithEffect(rhymeLabel, QPoint(x, y + 115));
+}
+
+void MainWindow::AnimateWithEffect(QLabel* label, const QPoint& endPos)
+{
+    if (label)
+    {
+        QPropertyAnimation* anim = new QPropertyAnimation(label, "pos");
+        anim->setDuration(1000);
+        anim->setEasingCurve(QEasingCurve::OutBack);
+        anim->setEndValue(endPos);
+        anim->start(QAbstractAnimation::DeleteWhenStopped);
+    }
+}
+
+void MainWindow::RemoveCurrentPerson()
+{
+    QString currentName = m_persons[m_currentIndex].name;
+    QLabel* photoLabel = findChild<QLabel*>(currentName + "_photo");
+    QLabel* nameLabel = findChild<QLabel*>(currentName + "_name");
+    QLabel* rhymeLabel = findChild<QLabel*>(currentName + "_rhyme");
+    if (photoLabel && nameLabel)
+    {
+        AnimateRemoval(photoLabel);
+        AnimateRemoval(nameLabel);
+        if (rhymeLabel) AnimateRemoval(rhymeLabel);
+        m_persons.removeAt(m_currentIndex);
+        if (m_persons.size() == 1) MoveLastPersonToCenter();
+        else if (!m_persons.isEmpty())
+        {
+            m_currentIndex = m_currentIndex % m_persons.size();
+            QTimer::singleShot(1200, this, [this]() {DisplayPhotosInCircle(this->m_persons, false);});
+        }
+    }
+}
+
+void MainWindow::MoveLastPersonToCenter()
+{
+    QString lastName = m_persons[0].name;
+    QLabel* lastPhotoLabel = findChild<QLabel*>(lastName + "_photo");
+    QLabel* lastNameLabel = findChild<QLabel*>(lastName + "_name");
+    if (lastPhotoLabel && lastNameLabel)
+    {
+        AnimateToCenter(lastPhotoLabel, QRect(width()/2-50, height()/2-50, 100, 100));
+        AnimateToCenter(lastNameLabel, QRect(width()/2-50, height()/2+50, 200, 20));
+        DisplayWinnerText(QRect(width()/2-50, height()/2+75, 150, 150), "venok.png");
+    }
+}
+
+void MainWindow::AnimateToCenter(QLabel* label, const QRect& geometry)
+{
+    QPropertyAnimation* anim = new QPropertyAnimation(label, "geometry");
+    anim->setDuration(800);
+    anim->setEasingCurve(QEasingCurve::InOutQuad);
+    anim->setEndValue(geometry);
+    anim->start(QAbstractAnimation::DeleteWhenStopped);
+}
+
+QString MainWindow::SelectRandomRhyme(const QVector<QString>& rhymes)
+{
+    if(rhymes.isEmpty()) return "";
+    else return rhymes[rand() % rhymes.size()];
+}
+
+QString MainWindow::FindLongestWord(const QString& rhyme)
+{
+    QStringList words = rhyme.split(' ');
+    QString longestWord;
+    for (const QString& word : words) if (word.length() > longestWord.length()) longestWord = word;
+    return longestWord;
+}
+
+void MainWindow::OnNextWordButtonClicked()
+{
+    if (m_rhymeRunning || m_persons.isEmpty()) return;
+    disconnect(m_ui->nextWordButton, &QPushButton::clicked, this, &MainWindow::OnNextWordButtonClicked);
+    if (!m_longestWordShowed) ShowLongestWordWithAnimation();
+    else ShowLongestWordStatic();
+    StartRhyme();
+}
+
+void MainWindow::ShowLongestWordWithAnimation()
+{
+    m_longestWordLabel->setGeometry(10, -20, width(), 20);
+    m_longestWordLabel->show();
+    QPropertyAnimation* anim = new QPropertyAnimation(m_longestWordLabel, "pos");
+    anim->setDuration(1000);
+    anim->setEasingCurve(QEasingCurve::OutBack);
+    anim->setEndValue(QPoint(10, 10));
+    anim->start(QAbstractAnimation::DeleteWhenStopped);
+    m_longestWordShowed = true;
+}
+
+void MainWindow::ShowLongestWordStatic()
+{
+    m_longestWordLabel->setGeometry(10, 10, width(), 20);
+    m_longestWordLabel->show();
+}
+
+void MainWindow::StartRhyme()
+{
+    m_rhymeRunning = true;
+    m_currentWordIndex = 0;
+    m_currentRhymeWordLabel->setText(m_rhymeWords[0]);
+    m_currentRhymeWordLabel->show();
+    HighlightCurrentPerson();
+    QLabel* rhymeLabel = findChild<QLabel*>(m_persons[m_currentIndex].name + "_rhyme");
+    if (rhymeLabel)
+    {
+        rhymeLabel->setText(m_rhymeWords[0]);
+        rhymeLabel->show();
+    }
+    m_rhymeTimer->start(50);
+}
+
+void MainWindow::UpdateRhymeWord()
+{
+    if (m_highlightedLabel) m_highlightedLabel->setStyleSheet("");
+    m_currentWordIndex = (m_currentWordIndex + 1) % m_rhymeWords.size();
+    m_currentRhymeWordLabel->setText(m_rhymeWords[m_currentWordIndex]);
+    UpdateCurrentPerson();
+    UpdateRhymeLabel();
+    if (m_currentWordIndex == m_rhymeWords.size() - 1)FinishRhyme();
+}
+
+void MainWindow::UpdateCurrentPerson()
+{
+    m_currentIndex = (m_currentIndex + 1) % m_persons.size();
+    HighlightCurrentPerson();
+}
+
+void MainWindow::UpdateRhymeLabel()
+{
+    QLabel* rhymeLabel = findChild<QLabel*>(m_persons[m_currentIndex].name + "_rhyme");
+    HideAllRhymeLabels();
+    if (rhymeLabel)
+    {
+        rhymeLabel->setText(m_rhymeWords[m_currentWordIndex]);
+        rhymeLabel->show();
+    }
+}
+
+void MainWindow::HideAllRhymeLabels()
+{
+    for (const Person& person : m_persons)
+    {
+        QLabel* label = findChild<QLabel*>(person.name + "_rhyme");
+        if (label) label->hide();
+    }
+}
+
+void MainWindow::FinishRhyme()
+{
+    m_rhymeTimer->stop();
+    QTimer::singleShot(1000, this, [this]() {
+        RemoveCurrentPerson();
+        m_currentRhymeWordLabel->hide();
+        m_rhymeRunning = false;
+        HideAllRhymeLabels();
+        if (m_persons.size() > 1) QTimer::singleShot(1200, this, &MainWindow::OnNextWordButtonClicked);
+    });
+}
+
+void MainWindow::HighlightCurrentPerson()
+{
+    if (m_highlightedLabel)m_highlightedLabel->setStyleSheet("");
+    m_highlightedLabel = findChild<QLabel*>(m_persons[m_currentIndex].name + "_photo");
+    if (m_highlightedLabel) m_highlightedLabel->setStyleSheet("border: 3px solid red; border-radius: 5px; ""background-color: rgba(255, 200, 200, 50);");
+}
+
+void MainWindow::AnimateRemoval(QLabel* label)
+{
+    QPropertyAnimation* animation = new QPropertyAnimation(label, "geometry");
+    animation->setDuration(1000);
+    animation->setEasingCurve(QEasingCurve::InCurve);
+    animation->setStartValue(label->geometry());
+    QPoint endPos = label->pos();
+    endPos.setX(width()+200);
+    endPos.setY(-label->height()-200);
+    QSize size = label->size();
+    size.setHeight(height() / 5);
+    size.setWidth(width() / 5);
+    animation->setEndValue(QRect(endPos, size));
+    animation->start(QAbstractAnimation::DeleteWhenStopped);
+    connect(animation, &QPropertyAnimation::finished,[label]() { label->deleteLater(); });
+}
+
+void MainWindow::DisplayWinnerText(QRect target, QString imagePath)
+{
+    ShowWinnerLabel(target);
+    ShowVenokImage(imagePath, target);
+    HideLongestWordLabel();
+}
+
+void MainWindow::ShowWinnerLabel(QRect target)
+{
+    QLabel* winnerText = new QLabel("Won!", this);
+    winnerText->setFont(QFont("TimesNewRoman", 24, QFont::Bold));
+    winnerText->setAlignment(Qt::AlignLeft);
+    winnerText->setGeometry(-200, -200, 100, 100);
+    winnerText->show();
+    QPropertyAnimation* anim = new QPropertyAnimation(winnerText, "geometry");
+    anim->setDuration(800);
+    anim->setEasingCurve(QEasingCurve::InOutQuad);
+    anim->setEndValue(target);
+    anim->start(QAbstractAnimation::DeleteWhenStopped);
+}
+
+void MainWindow::ShowVenokImage(const QString& imagePath, QRect target)
+{
+    QLabel* venok = new QLabel(this);
+    QPixmap pixmap(imagePath);
+    if (!pixmap.isNull())
+    {
+        venok->setPixmap(pixmap.scaled(150, 150, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        venok->setGeometry(width()/2 - 50, -100, 150, 150);
+        venok->setAlignment(Qt::AlignCenter);
+        venok->show();
+        QPropertyAnimation* anim = new QPropertyAnimation(venok, "geometry");
+        anim->setDuration(800);
+        anim->setEasingCurve(QEasingCurve::InOutQuad);
+        target.setX(width()/2-100);
+        target.setY(height()/2 - 350);
+        anim->setEndValue(target);
+        anim->start(QAbstractAnimation::DeleteWhenStopped);
+    }
+}
+
+void MainWindow::HideLongestWordLabel()
+{
+    QPropertyAnimation* anim = new QPropertyAnimation(m_longestWordLabel, "pos");
+    anim->setDuration(500);
+    anim->setEasingCurve(QEasingCurve::OutCurve);
+    anim->setEndValue(QPoint(10, -15));
+    anim->start(QAbstractAnimation::DeleteWhenStopped);
+}
