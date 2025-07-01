@@ -40,7 +40,7 @@
        QPushButton:hover { background: #2980b9; }</string>
       </property>
       <property name="text">
-       <string>Next Word</string>
+       <string>Start rhyme</string>
       </property>
      </widget>
     </item>

@@ -23,7 +23,8 @@ public:
     ~MainWindow();
 
 private slots:
-    void OnNextWordButtonClicked();
+    void OnStartRhymeButtonClicked();
+    void OnPlayPauseButtonClicked();
     void UpdateRhymeWord();
 
 private:
@@ -90,6 +91,7 @@ private:
     bool m_rhymeRunning;
     bool m_firstTime;
     bool m_longestWordShowed;
+    bool m_rhymePaused;
     QLabel *m_highlightedLabel;
 };
 

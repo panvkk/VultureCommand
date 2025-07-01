@@ -6,5 +6,7 @@ int main(int argc, char *argv[]) {
     MainWindow window;
     window.show();
     window.setFixedSize(750,750);
+    window.setWindowTitle("VultureCommandIKM");
     return app.exec();
 }
+

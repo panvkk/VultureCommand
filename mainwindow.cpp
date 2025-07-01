@@ -26,7 +26,7 @@ MainWindow::MainWindow(QWidget* parent)
     , m_firstTime(true)
     , m_longestWordShowed(false)
     , m_highlightedLabel(nullptr)
-
+    , m_rhymePaused(false)
 {
     m_ui->setupUi(this);
     InitializeComponents();
@@ -95,7 +95,8 @@ void MainWindow::SetupRhymeTimer()
 {
     m_rhymeTimer = new QTimer(this);
     connect(m_rhymeTimer, &QTimer::timeout, this, &MainWindow::UpdateRhymeWord);
-    connect(m_ui->nextWordButton, &QPushButton::clicked, this, &MainWindow::OnNextWordButtonClicked);
+    connect(m_ui->nextWordButton, &QPushButton::clicked, this, &MainWindow::OnPlayPauseButtonClicked);
+    m_ui->nextWordButton->setText("Start rhyme");
 }
 
 QVector<QString> MainWindow::LoadRhymes(const QString& filePath)
@@ -295,14 +296,36 @@ QString MainWindow::FindLongestWord(const QString& rhyme)
     return longestWord;
 }
 
-void MainWindow::OnNextWordButtonClicked()
+void MainWindow::OnStartRhymeButtonClicked()
 {
     if (m_rhymeRunning || m_persons.isEmpty()) return;
-    disconnect(m_ui->nextWordButton, &QPushButton::clicked, this, &MainWindow::OnNextWordButtonClicked);
+    disconnect(m_ui->nextWordButton, &QPushButton::clicked, this, &MainWindow::OnStartRhymeButtonClicked);
     if (!m_longestWordShowed) ShowLongestWordWithAnimation();
     else ShowLongestWordStatic();
     StartRhyme();
 }
+
+void MainWindow::OnPlayPauseButtonClicked()
+{
+    if (m_rhymeRunning){
+        if (m_rhymePaused){
+            m_rhymePaused = false;
+            m_rhymeTimer->start(750);
+            m_ui->nextWordButton->setText("Stop rhyme");
+        }else{
+            m_rhymePaused = true;
+            m_rhymeTimer->stop();
+            m_ui->nextWordButton->setText("Start rhyme");
+        }
+    }
+    else{
+        if (!m_longestWordShowed) ShowLongestWordWithAnimation();
+        else ShowLongestWordStatic();
+        StartRhyme();
+        m_ui->nextWordButton->setText("Stop rhyme");
+    }
+}
+
 
 void MainWindow::ShowLongestWordWithAnimation()
 {
@@ -320,22 +343,6 @@ void MainWindow::ShowLongestWordStatic()
 {
     m_longestWordLabel->setGeometry(10, 10, width(), 20);
     m_longestWordLabel->show();
-}
-
-void MainWindow::StartRhyme()
-{
-    m_rhymeRunning = true;
-    m_currentWordIndex = 0;
-    m_currentRhymeWordLabel->setText(m_rhymeWords[0]);
-    m_currentRhymeWordLabel->show();
-    HighlightCurrentPerson();
-    QLabel* rhymeLabel = findChild<QLabel*>(m_persons[m_currentIndex].name + "_rhyme");
-    if (rhymeLabel)
-    {
-        rhymeLabel->setText(m_rhymeWords[0]);
-        rhymeLabel->show();
-    }
-    m_rhymeTimer->start(50);
 }
 
 void MainWindow::UpdateRhymeWord()
@@ -372,18 +379,6 @@ void MainWindow::HideAllRhymeLabels()
         QLabel* label = findChild<QLabel*>(person.name + "_rhyme");
         if (label) label->hide();
     }
-}
-
-void MainWindow::FinishRhyme()
-{
-    m_rhymeTimer->stop();
-    QTimer::singleShot(1000, this, [this]() {
-        RemoveCurrentPerson();
-        m_currentRhymeWordLabel->hide();
-        m_rhymeRunning = false;
-        HideAllRhymeLabels();
-        if (m_persons.size() > 1) QTimer::singleShot(1200, this, &MainWindow::OnNextWordButtonClicked);
-    });
 }
 
 void MainWindow::HighlightCurrentPerson()
@@ -458,4 +453,37 @@ void MainWindow::HideLongestWordLabel()
     anim->setEasingCurve(QEasingCurve::OutCurve);
     anim->setEndValue(QPoint(10, -15));
     anim->start(QAbstractAnimation::DeleteWhenStopped);
+}
+
+void MainWindow::StartRhyme()
+{
+    m_rhymeRunning = true;
+    m_rhymePaused = false;
+    m_currentWordIndex = 0;
+    m_currentRhymeWordLabel->setText(m_rhymeWords[0]);
+    m_currentRhymeWordLabel->show();
+    HighlightCurrentPerson();
+    QLabel* rhymeLabel = findChild<QLabel*>(m_persons[m_currentIndex].name + "_rhyme");
+    if (rhymeLabel)
+    {
+        rhymeLabel->setText(m_rhymeWords[0]);
+        rhymeLabel->show();
+    }
+    m_rhymeTimer->start(750);
+}
+
+void MainWindow::FinishRhyme()
+{
+    m_rhymeTimer->stop();
+    QTimer::singleShot(1000, this, [this]() {
+        RemoveCurrentPerson();
+        m_currentRhymeWordLabel->hide();
+        m_rhymeRunning = false;
+        m_rhymePaused = false;
+        HideAllRhymeLabels();
+        m_ui->nextWordButton->setText("Старт");
+        if (m_persons.size() > 1) QTimer::singleShot(1200, this, [this]() {
+                OnPlayPauseButtonClicked();
+            });
+    });
 }
