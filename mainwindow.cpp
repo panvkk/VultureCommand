@@ -10,8 +10,30 @@
 #include <QTimer>
 #include <ctime>
 #include <QRandomGenerator>
+#include <QSettings>
+#include <QStyle> // Добавлено для QStyle
+#include <QApplication>
+#include <QPalette>
+#include <QStyleHints> // Добавлено для QStyleHints
 
 using namespace std;
+
+// Проверка темной темы через реестр Windows
+bool isSystemDarkTheme() {
+// Для Qt 5.14+ (с проверкой версии)
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+    if (QApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark) {
+        return true;
+    }
+#endif
+
+    // Для старых версий Qt
+    QSettings registry(
+        "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+        QSettings::NativeFormat
+        );
+    return registry.value("AppsUseLightTheme", 1).toInt() == 0;
+}
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -26,11 +48,16 @@ MainWindow::MainWindow(QWidget* parent)
     , m_firstTime(true)
     , m_longestWordShowed(false)
     , m_highlightedLabel(nullptr)
-
 {
     m_ui->setupUi(this);
+
+    // Определение и применение темы
+    m_isDarkTheme = isSystemDarkTheme();
+    applyThemeStyles();
+
     InitializeComponents();
 }
+
 
 MainWindow::~MainWindow()
 {
@@ -38,12 +65,65 @@ MainWindow::~MainWindow()
     delete m_rhymeTimer;
 }
 
+void MainWindow::applyThemeStyles()
+{
+    // Установка цветов палитры
+    QPalette palette = QApplication::palette();
+    if (m_isDarkTheme) {
+        // Темная палитра
+        palette.setColor(QPalette::Window, QColor(45, 45, 45));
+        palette.setColor(QPalette::WindowText, Qt::white);
+        palette.setColor(QPalette::Base, QColor(35, 35, 35));
+        palette.setColor(QPalette::Text, Qt::white);
+        palette.setColor(QPalette::Button, QColor(58, 58, 58));
+        palette.setColor(QPalette::ButtonText, Qt::white);
+    } else {
+        // Светлая палитра
+        palette = QApplication::style()->standardPalette(); // Исправлено
+    }
+    QApplication::setPalette(palette);
+
+    // Стиль кнопки
+    QString buttonStyle =
+        "QPushButton {"
+        "   background-color: %bg%;"
+        "   color: %text%;"
+        "   border: 1px solid %border%;"
+        "   border-radius: 4px;"
+        "   padding: 5px;"
+        "}"
+        "QPushButton:hover {"
+        "   background-color: %hover%;"
+        "}";
+
+    if (m_isDarkTheme) {
+        buttonStyle
+            .replace("%bg%", "#3a3a3a")
+            .replace("%text%", "white")
+            .replace("%border%", "#555555")
+            .replace("%hover%", "#4a4a4a");
+    } else {
+        buttonStyle
+            .replace("%bg%", "#e0e0e0")
+            .replace("%text%", "black")
+            .replace("%border%", "#cccccc")
+            .replace("%hover%", "#d0d0d0");
+    }
+
+    // Применяем стиль ко всем кнопкам
+    QList<QPushButton*> buttons = findChildren<QPushButton*>();
+    for (QPushButton* button : buttons) {
+        button->setStyleSheet(buttonStyle);
+    }
+}
+
 void MainWindow::InitializeComponents()
 {
     QRandomGenerator::securelySeeded();
     srand(time(0));
+    setWindowTitle("VultureCommand - Panov");
     SetupCurrentRhymeWordLabel();
-    QVector<QString> rhymes = LoadRhymes("schitalki.txt");
+    QVector<QString> rhymes = LoadRhymes("rhyme.txt");
     m_persons = LoadPhotos("photos");
     if (!InitializeGame(rhymes)) return;
     SetupRhymeTimer();
@@ -54,6 +134,11 @@ void MainWindow::SetupCurrentRhymeWordLabel()
     m_currentRhymeWordLabel = new QLabel(this);
     m_currentRhymeWordLabel->setAlignment(Qt::AlignCenter);
     m_currentRhymeWordLabel->setFont(QFont("TimesNewRoman", 14));
+
+    // Установка цвета текста в зависимости от темы
+    QString textColor = m_isDarkTheme ? "white" : "black";
+    m_currentRhymeWordLabel->setStyleSheet("color: " + textColor + "; font-weight: bold;");
+
     m_currentRhymeWordLabel->move(-25, height() / 2);
     m_currentRhymeWordLabel->setFixedSize(width(), 30);
     m_currentRhymeWordLabel->hide();
@@ -76,7 +161,7 @@ bool MainWindow::InitializeGame(const QVector<QString>& rhymes)
 
 void MainWindow::ShowErrorMessage()
 {
-    QMessageBox::critical(this, "Ошибка","\nПроверьте:\n1. Файл 'schitalki.txt';\n2. Папку 'photos';");
+    QMessageBox::critical(this, "Ошибка","\nПроверьте:\n1. Файл 'rhyme.txt';\n2. Папку 'photos';");
     QTimer::singleShot(0, this, &QCoreApplication::quit);
 }
 
@@ -88,6 +173,11 @@ void MainWindow::InitializeLongestWordLabel(const QString& rhyme)
     m_longestWordLabel->setText("Самое длинное слово: " + FindLongestWord(rhyme));
     m_longestWordLabel->setAlignment(Qt::AlignLeft);
     m_longestWordLabel->setFixedSize(width(), 20);
+
+    // Установка цвета текста в зависимости от темы
+    QString textColor = m_isDarkTheme ? "white" : "black";
+    m_longestWordLabel->setStyleSheet("color: " + textColor + ";");
+
     m_longestWordLabel->hide();
 }
 
@@ -200,7 +290,11 @@ QLabel* MainWindow::CreateNameLabel(const Person& person)
 {
     QLabel* nameLabel = new QLabel(person.name, this);
     nameLabel->setFont(QFont("TimesNewRoman", 10));
-    nameLabel->setStyleSheet("color:black; font-weight: bold;");
+
+    // Адаптивный цвет текста
+    QString textColor = m_isDarkTheme ? "white" : "black";
+    nameLabel->setStyleSheet("color: " + textColor + "; font-weight: bold;");
+
     nameLabel->setAlignment(Qt::AlignLeft);
     nameLabel->setObjectName(person.name + "_name");
     nameLabel->setGeometry(width()/2-50, height()/2+50, 200, 20);
@@ -213,6 +307,11 @@ QLabel* MainWindow::CreateRhymeLabel(const Person& person)
     QLabel* rhymeLabel = new QLabel(this);
     rhymeLabel->setAlignment(Qt::AlignLeft);
     rhymeLabel->setFont(QFont("TimesNewRoman", 10));
+
+    // Адаптивный цвет текста
+    QString textColor = m_isDarkTheme ? "white" : "black";
+    rhymeLabel->setStyleSheet("color: " + textColor + ";");
+
     rhymeLabel->setObjectName(person.name + "_rhyme");
     rhymeLabel->setGeometry(width()/2-50, height()/2+65, 200, 20);
     rhymeLabel->hide();
@@ -388,9 +487,20 @@ void MainWindow::FinishRhyme()
 
 void MainWindow::HighlightCurrentPerson()
 {
-    if (m_highlightedLabel)m_highlightedLabel->setStyleSheet("");
+    if (m_highlightedLabel) {
+        // Сброс предыдущей подсветки
+        m_highlightedLabel->setStyleSheet("");
+    }
+
     m_highlightedLabel = findChild<QLabel*>(m_persons[m_currentIndex].name + "_photo");
-    if (m_highlightedLabel) m_highlightedLabel->setStyleSheet("border: 3px solid red; border-radius: 5px; ""background-color: rgba(255, 200, 200, 50);");
+    if (m_highlightedLabel) {
+        // Универсальная подсветка для обеих тем
+        m_highlightedLabel->setStyleSheet(
+            "border: 3px solid red;"
+            "border-radius: 5px;"
+            "background-color: rgba(255, 200, 200, 50);"
+            );
+    }
 }
 
 void MainWindow::AnimateRemoval(QLabel* label)
@@ -421,6 +531,11 @@ void MainWindow::ShowWinnerLabel(QRect target)
 {
     QLabel* winnerText = new QLabel("Won!", this);
     winnerText->setFont(QFont("TimesNewRoman", 24, QFont::Bold));
+
+    // Адаптивный цвет текста
+    QString textColor = m_isDarkTheme ? "white" : "black";
+    winnerText->setStyleSheet("color: " + textColor + ";");
+
     winnerText->setAlignment(Qt::AlignLeft);
     winnerText->setGeometry(-200, -200, 100, 100);
     winnerText->show();

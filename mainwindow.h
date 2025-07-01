@@ -69,6 +69,14 @@ private:
     void ShowVenokImage(const QString& imagePath, QRect target);
     void HideLongestWordLabel();
 
+    // Темы
+    bool m_isDarkTheme;
+    void applyThemeStyles();
+    void updateStylesForTheme(bool isDark);
+    void setLabelColors();
+    void setButtonStyle();
+    bool isDarkTheme() const;
+
     // Логика игры
     void ShowLongestWordWithAnimation();
     void ShowLongestWordStatic();
