@@ -12,6 +12,7 @@ HEADERS += mainwindow.h \
            person.h
 
 RESOURCES += \
+    resources.qrc \
     sounds.qrc \
     images.qrc
 
