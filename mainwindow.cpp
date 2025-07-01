@@ -121,6 +121,7 @@ void MainWindow::InitializeComponents()
 {
     QRandomGenerator::securelySeeded();
     srand(time(0));
+    setWindowTitle("VultureCommand - Panov");
     SetupCurrentRhymeWordLabel();
     QVector<QString> rhymes = LoadRhymes("rhyme.txt");
     m_persons = LoadPhotos("photos");
