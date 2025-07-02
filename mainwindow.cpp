@@ -25,8 +25,8 @@ MainWindow::MainWindow(QWidget* parent)
     , m_rhymeRunning(false)
     , m_firstTime(true)
     , m_longestWordShowed(false)
-    , m_highlightedLabel(nullptr)
     , m_rhymePaused(false)
+    , m_highlightedLabel(nullptr)
 {
     m_ui->setupUi(this);
     InitializeComponents();
@@ -481,7 +481,7 @@ void MainWindow::FinishRhyme()
         m_rhymeRunning = false;
         m_rhymePaused = false;
         HideAllRhymeLabels();
-        m_ui->nextWordButton->setText("Старт");
+        m_ui->nextWordButton->setText("Start rhyme");
         if (m_persons.size() > 1) QTimer::singleShot(1200, this, [this]() {
                 OnPlayPauseButtonClicked();
             });
