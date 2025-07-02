@@ -11,25 +11,22 @@
 #include <ctime>
 #include <QRandomGenerator>
 #include <QSettings>
-#include <QStyle> // Добавлено для QStyle
+#include <QStyle> 
 #include <QApplication>
 #include <QPalette>
-#include <QStyleHints> // Добавлено для QStyleHints
+#include <QStyleHints> 
 #include <QMenuBar>
 #include <QFileDialog>
 
 using namespace std;
 
-// Проверка темной темы через реестр Windows
 bool isSystemDarkTheme() {
-// Для Qt 5.14+ (с проверкой версии)
 #if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
     if (QApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark) {
         return true;
     }
 #endif
 
-    // Для старых версий Qt
     QSettings registry(
         "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
         QSettings::NativeFormat
@@ -49,11 +46,11 @@ MainWindow::MainWindow(QWidget* parent)
     , m_rhymeRunning(false)
     , m_firstTime(true)
     , m_longestWordShowed(false)
+    , m_rhymePaused(false)
     , m_highlightedLabel(nullptr)
 {
     m_ui->setupUi(this);
 
-    // Определение и применение темы
     m_isDarkTheme = isSystemDarkTheme();
     applyThemeStyles();
 
@@ -72,7 +69,6 @@ MainWindow::~MainWindow()
 
 void MainWindow::applyThemeStyles()
 {
-    // Установка цветов палитры
     QPalette palette = QApplication::palette();
     if (m_isDarkTheme) {
         // Темная палитра
@@ -299,6 +295,8 @@ void MainWindow::SetupRhymeTimer()
 {
     m_rhymeTimer = new QTimer(this);
     connect(m_rhymeTimer, &QTimer::timeout, this, &MainWindow::UpdateRhymeWord);
+    connect(m_ui->nextWordButton, &QPushButton::clicked, this, &MainWindow::OnPlayPauseButtonClicked);
+    m_ui->nextWordButton->setText("Start rhyme");
 }
 
 QVector<QString> MainWindow::LoadRhymes(const QString& filePath)
@@ -403,8 +401,6 @@ QLabel* MainWindow::CreateNameLabel(const Person& person)
 {
     QLabel* nameLabel = new QLabel(person.name, this);
     nameLabel->setFont(QFont("TimesNewRoman", 10));
-
-    // Адаптивный цвет текста
     QString textColor = m_isDarkTheme ? "white" : "black";
     nameLabel->setStyleSheet("color: " + textColor + "; font-weight: bold;");
 
@@ -420,8 +416,6 @@ QLabel* MainWindow::CreateRhymeLabel(const Person& person)
     QLabel* rhymeLabel = new QLabel(this);
     rhymeLabel->setAlignment(Qt::AlignLeft);
     rhymeLabel->setFont(QFont("TimesNewRoman", 10));
-
-    // Адаптивный цвет текста
     QString textColor = m_isDarkTheme ? "white" : "black";
     rhymeLabel->setStyleSheet("color: " + textColor + ";");
 
@@ -508,7 +502,7 @@ QString MainWindow::FindLongestWord(const QString& rhyme)
     return longestWord;
 }
 
-void MainWindow::OnNextWordButtonClicked()
+void MainWindow::OnStartRhymeButtonClicked()
 {
     if (m_persons.isEmpty()) {
         QMessageBox::warning(this, "Ошибка", "Не выбраны фотографии!");
@@ -548,6 +542,28 @@ void MainWindow::OnNextWordButtonClicked()
     StartRhyme();
 }
 
+void MainWindow::OnPlayPauseButtonClicked()
+{
+    if (m_rhymeRunning){
+        if (m_rhymePaused){
+            m_rhymePaused = false;
+            m_rhymeTimer->start(750);
+            m_ui->nextWordButton->setText("Stop rhyme");
+        }else{
+            m_rhymePaused = true;
+            m_rhymeTimer->stop();
+            m_ui->nextWordButton->setText("Start rhyme");
+        }
+    }
+    else{
+        if (!m_longestWordShowed) ShowLongestWordWithAnimation();
+        else ShowLongestWordStatic();
+        StartRhyme();
+        m_ui->nextWordButton->setText("Stop rhyme");
+    }
+}
+
+
 void MainWindow::ShowLongestWordWithAnimation()
 {
     m_longestWordLabel->setGeometry(10, -20, width(), 20);
@@ -564,22 +580,6 @@ void MainWindow::ShowLongestWordStatic()
 {
     m_longestWordLabel->setGeometry(10, 10, width(), 20);
     m_longestWordLabel->show();
-}
-
-void MainWindow::StartRhyme()
-{
-    m_rhymeRunning = true;
-    m_currentWordIndex = 0;
-    m_currentRhymeWordLabel->setText(m_rhymeWords[0]);
-    m_currentRhymeWordLabel->show();
-    HighlightCurrentPerson();
-    QLabel* rhymeLabel = findChild<QLabel*>(m_persons[m_currentIndex].name + "_rhyme");
-    if (rhymeLabel)
-    {
-        rhymeLabel->setText(m_rhymeWords[0]);
-        rhymeLabel->show();
-    }
-    m_rhymeTimer->start(50);
 }
 
 void MainWindow::UpdateRhymeWord()
@@ -618,28 +618,14 @@ void MainWindow::HideAllRhymeLabels()
     }
 }
 
-void MainWindow::FinishRhyme()
-{
-    m_rhymeTimer->stop();
-    QTimer::singleShot(1000, this, [this]() {
-        RemoveCurrentPerson();
-        m_currentRhymeWordLabel->hide();
-        m_rhymeRunning = false;
-        HideAllRhymeLabels();
-        if (m_persons.size() > 1) QTimer::singleShot(1200, this, &MainWindow::OnNextWordButtonClicked);
-    });
-}
-
 void MainWindow::HighlightCurrentPerson()
 {
     if (m_highlightedLabel) {
-        // Сброс предыдущей подсветки
         m_highlightedLabel->setStyleSheet("");
     }
 
     m_highlightedLabel = findChild<QLabel*>(m_persons[m_currentIndex].name + "_photo");
     if (m_highlightedLabel) {
-        // Универсальная подсветка для обеих тем
         m_highlightedLabel->setStyleSheet(
             "border: 3px solid red;"
             "border-radius: 5px;"
@@ -677,7 +663,6 @@ void MainWindow::ShowWinnerLabel(QRect target)
     QLabel* winnerText = new QLabel("Won!", this);
     winnerText->setFont(QFont("TimesNewRoman", 24, QFont::Bold));
 
-    // Адаптивный цвет текста
     QString textColor = m_isDarkTheme ? "white" : "black";
     winnerText->setStyleSheet("color: " + textColor + ";");
 
@@ -718,4 +703,37 @@ void MainWindow::HideLongestWordLabel()
     anim->setEasingCurve(QEasingCurve::OutCurve);
     anim->setEndValue(QPoint(10, -15));
     anim->start(QAbstractAnimation::DeleteWhenStopped);
+}
+
+void MainWindow::StartRhyme()
+{
+    m_rhymeRunning = true;
+    m_rhymePaused = false;
+    m_currentWordIndex = 0;
+    m_currentRhymeWordLabel->setText(m_rhymeWords[0]);
+    m_currentRhymeWordLabel->show();
+    HighlightCurrentPerson();
+    QLabel* rhymeLabel = findChild<QLabel*>(m_persons[m_currentIndex].name + "_rhyme");
+    if (rhymeLabel)
+    {
+        rhymeLabel->setText(m_rhymeWords[0]);
+        rhymeLabel->show();
+    }
+    m_rhymeTimer->start(750);
+}
+
+void MainWindow::FinishRhyme()
+{
+    m_rhymeTimer->stop();
+    QTimer::singleShot(1000, this, [this]() {
+        RemoveCurrentPerson();
+        m_currentRhymeWordLabel->hide();
+        m_rhymeRunning = false;
+        m_rhymePaused = false;
+        HideAllRhymeLabels();
+        m_ui->nextWordButton->setText("Start rhyme");
+        if (m_persons.size() > 1) QTimer::singleShot(1200, this, [this]() {
+                OnPlayPauseButtonClicked();
+            });
+    });
 }

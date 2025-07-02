@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
 
     MainWindow window;
     window.show();
-    window.setFixedSize(750, 750);
-
+    window.setFixedSize(750,750);
     return app.exec();
 }
+
