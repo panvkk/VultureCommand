@@ -26,15 +26,19 @@ private slots:
     void OnStartRhymeButtonClicked();
     void OnPlayPauseButtonClicked();
     void UpdateRhymeWord();
+    void SelectPhotosFolder();
+    void SelectRhymesFile();
+    void ResetGame();
 
 private:
     // Инициализация компонентов
     void InitializeComponents();
     void SetupCurrentRhymeWordLabel();
     bool InitializeGame(const QVector<QString>& rhymes);
-    void ShowErrorMessage();
     void InitializeLongestWordLabel(const QString& rhyme);
     void SetupRhymeTimer();
+    void CreateMenuBar();
+    bool InitializeGame();
 
     // Работа с данными
     QVector<QString> LoadRhymes(const QString& filePath);
@@ -70,6 +74,14 @@ private:
     void ShowVenokImage(const QString& imagePath, QRect target);
     void HideLongestWordLabel();
 
+    // Темы
+    bool m_isDarkTheme;
+    void applyThemeStyles();
+    void updateStylesForTheme(bool isDark);
+    void setLabelColors();
+    void setButtonStyle();
+    bool isDarkTheme() const;
+
     // Логика игры
     void ShowLongestWordWithAnimation();
     void ShowLongestWordStatic();
@@ -84,6 +96,7 @@ private:
     QLabel *m_currentRhymeWordLabel;
     QPushButton *m_nextWordButton;
     QList<Person> m_persons;
+    QVector<QString> m_allRhymes;
     QStringList m_rhymeWords;
     QTimer *m_rhymeTimer;
     int m_currentIndex;
@@ -93,6 +106,8 @@ private:
     bool m_longestWordShowed;
     bool m_rhymePaused;
     QLabel *m_highlightedLabel;
+    QAction* selectPhotosAction = nullptr;
+    QAction* selectRhymesAction = nullptr;
 };
 
 #endif // MAINWINDOW_H

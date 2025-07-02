@@ -10,8 +10,29 @@
 #include <QTimer>
 #include <ctime>
 #include <QRandomGenerator>
+#include <QSettings>
+#include <QStyle> 
+#include <QApplication>
+#include <QPalette>
+#include <QStyleHints> 
+#include <QMenuBar>
+#include <QFileDialog>
 
 using namespace std;
+
+bool isSystemDarkTheme() {
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
+    if (QApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark) {
+        return true;
+    }
+#endif
+
+    QSettings registry(
+        "HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+        QSettings::NativeFormat
+        );
+    return registry.value("AppsUseLightTheme", 1).toInt() == 0;
+}
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -29,8 +50,16 @@ MainWindow::MainWindow(QWidget* parent)
     , m_highlightedLabel(nullptr)
 {
     m_ui->setupUi(this);
+
+    m_isDarkTheme = isSystemDarkTheme();
+    applyThemeStyles();
+
+    CreateMenuBar();
     InitializeComponents();
+    SetupCurrentRhymeWordLabel();
+    SetupRhymeTimer();
 }
+
 
 MainWindow::~MainWindow()
 {
@@ -38,15 +67,177 @@ MainWindow::~MainWindow()
     delete m_rhymeTimer;
 }
 
+void MainWindow::applyThemeStyles()
+{
+    QPalette palette = QApplication::palette();
+    if (m_isDarkTheme) {
+        // Темная палитра
+        palette.setColor(QPalette::Window, QColor(45, 45, 45));
+        palette.setColor(QPalette::WindowText, Qt::white);
+        palette.setColor(QPalette::Base, QColor(35, 35, 35));
+        palette.setColor(QPalette::Text, Qt::white);
+        palette.setColor(QPalette::Button, QColor(58, 58, 58));
+        palette.setColor(QPalette::ButtonText, Qt::white);
+    } else {
+        // Светлая палитра
+        palette = QApplication::style()->standardPalette(); // Исправлено
+    }
+    QApplication::setPalette(palette);
+
+    // Стиль кнопки
+    QString buttonStyle =
+        "QPushButton {"
+        "   background-color: %bg%;"
+        "   color: %text%;"
+        "   border: 1px solid %border%;"
+        "   border-radius: 4px;"
+        "   padding: 5px;"
+        "}"
+        "QPushButton:hover {"
+        "   background-color: %hover%;"
+        "}";
+
+    if (m_isDarkTheme) {
+        buttonStyle
+            .replace("%bg%", "#3a3a3a")
+            .replace("%text%", "white")
+            .replace("%border%", "#555555")
+            .replace("%hover%", "#4a4a4a");
+    } else {
+        buttonStyle
+            .replace("%bg%", "#e0e0e0")
+            .replace("%text%", "black")
+            .replace("%border%", "#cccccc")
+            .replace("%hover%", "#d0d0d0");
+    }
+
+    // Применяем стиль ко всем кнопкам
+    QList<QPushButton*> buttons = findChildren<QPushButton*>();
+    for (QPushButton* button : buttons) {
+        button->setStyleSheet(buttonStyle);
+    }
+}
+
 void MainWindow::InitializeComponents()
 {
+    setWindowTitle("Vulture Command);
     QRandomGenerator::securelySeeded();
     srand(time(0));
+
     SetupCurrentRhymeWordLabel();
-    QVector<QString> rhymes = LoadRhymes("schitalki.txt");
+    QVector<QString> rhymes = LoadRhymes("rhyme.txt");
     m_persons = LoadPhotos("photos");
     if (!InitializeGame(rhymes)) return;
     SetupRhymeTimer();
+
+    m_nextWordButton = m_ui->nextWordButton;
+    connect(m_ui->nextWordButton, &QPushButton::clicked, this, &MainWindow::OnNextWordButtonClicked);
+}
+
+bool MainWindow::InitializeGame()
+{
+    if (m_persons.isEmpty() || m_rhymeWords.isEmpty()) {
+        return false;
+    }
+
+    random_device rd;
+    mt19937 g(rd());
+    shuffle(m_persons.begin(), m_persons.end(), g);
+
+    m_currentIndex = rand() % m_persons.size();
+    DisplayPhotosInCircle(m_persons, m_firstTime);
+    m_firstTime = false;
+
+    return true;
+}
+
+
+void MainWindow::CreateMenuBar()
+{
+    QMenuBar* menuBar = new QMenuBar(this);
+    QMenu* fileMenu = menuBar->addMenu("Файл");
+
+    selectPhotosAction = new QAction("Выбрать папку с фото", this);
+    connect(selectPhotosAction, &QAction::triggered, this, &MainWindow::SelectPhotosFolder);
+    fileMenu->addAction(selectPhotosAction);
+
+    selectRhymesAction = new QAction("Выбрать файл со считалочками", this);
+    connect(selectRhymesAction, &QAction::triggered, this, &MainWindow::SelectRhymesFile);
+    fileMenu->addAction(selectRhymesAction);
+
+    setMenuBar(menuBar);
+}
+
+void MainWindow::SelectPhotosFolder()
+{
+    QString folderPath = QFileDialog::getExistingDirectory(
+        this,
+        "Выберите папку с фото",
+        QDir::homePath(),
+        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks
+        );
+
+    if (!folderPath.isEmpty()) {
+        m_persons = LoadPhotos(folderPath);
+        if (m_persons.isEmpty()) {
+            QMessageBox::warning(this, "Ошибка",
+                                 "В папке нет поддерживаемых фото (png, jpg, jpeg, HEIC)!");
+        }
+        else {
+            QMessageBox::information(this, "Успешно",
+                                     QString("Загружено %1 фотографий!").arg(m_persons.size()));
+            DisplayPhotosInCircle(m_persons, true);
+
+            selectPhotosAction->setEnabled(false);
+            selectPhotosAction->setText("Фото загружены");
+        }
+    }
+}
+
+void MainWindow::SelectRhymesFile()
+{
+    QString filePath = QFileDialog::getOpenFileName(
+        this,
+        "Выберите файл со считалочками",
+        QDir::homePath(),
+        "Текстовые файлы (*.txt);;Все файлы (*)"
+        );
+
+    if (!filePath.isEmpty()) {
+        m_allRhymes = LoadRhymes(filePath); // Сохраняем все считалочки
+        if (m_allRhymes.isEmpty()) {
+            QMessageBox::warning(this, "Ошибка", "Файл пуст или не читается!");
+        }
+        else {
+            QMessageBox::information(this, "Успешно", "Считалочки загружены!");
+            selectRhymesAction->setEnabled(false);
+            selectRhymesAction->setText("Считалки загружены");
+        }
+    }
+}
+
+void MainWindow::ResetGame()
+{
+    QList<QLabel*> labels = findChildren<QLabel*>();
+    for (QLabel* label : labels) {
+        if (label != m_longestWordLabel && label != m_currentRhymeWordLabel) {
+            label->deleteLater();
+        }
+    }
+
+    m_firstTime = true;
+    m_longestWordShowed = false;
+    m_rhymeRunning = false;
+    m_currentIndex = 0;
+    m_currentWordIndex = 0;
+
+    if (!m_persons.isEmpty() && !m_rhymeWords.isEmpty()) {
+        DisplayPhotosInCircle(m_persons, true);
+        InitializeLongestWordLabel(m_rhymeWords.join(" "));
+    }
+    else {
+        QMessageBox::warning(this, "Ошибка", "Не хватает данных для запуска игры!");
+    }
 }
 
 void MainWindow::SetupCurrentRhymeWordLabel()
@@ -54,6 +245,11 @@ void MainWindow::SetupCurrentRhymeWordLabel()
     m_currentRhymeWordLabel = new QLabel(this);
     m_currentRhymeWordLabel->setAlignment(Qt::AlignCenter);
     m_currentRhymeWordLabel->setFont(QFont("TimesNewRoman", 14));
+
+    // Установка цвета текста в зависимости от темы
+    QString textColor = m_isDarkTheme ? "white" : "black";
+    m_currentRhymeWordLabel->setStyleSheet("color: " + textColor + "; font-weight: bold;");
+
     m_currentRhymeWordLabel->move(-25, height() / 2);
     m_currentRhymeWordLabel->setFixedSize(width(), 30);
     m_currentRhymeWordLabel->hide();
@@ -64,7 +260,6 @@ bool MainWindow::InitializeGame(const QVector<QString>& rhymes)
     random_device rd;
     mt19937 g(rd());
     shuffle(m_persons.begin(), m_persons.end(), g);
-    if (m_persons.isEmpty() || rhymes.isEmpty()) { ShowErrorMessage(); return false; }
     m_currentIndex = rand() % m_persons.size();
     DisplayPhotosInCircle(m_persons, m_firstTime);
     m_firstTime = false;
@@ -76,7 +271,7 @@ bool MainWindow::InitializeGame(const QVector<QString>& rhymes)
 
 void MainWindow::ShowErrorMessage()
 {
-    QMessageBox::critical(this, "Ошибка","\nПроверьте:\n1. Файл 'schitalki.txt';\n2. Папку 'photos';");
+    QMessageBox::critical(this, "Ошибка","\nПроверьте:\n1. Файл 'rhyme.txt';\n2. Папку 'photos';");
     QTimer::singleShot(0, this, &QCoreApplication::quit);
 }
 
@@ -86,8 +281,13 @@ void MainWindow::InitializeLongestWordLabel(const QString& rhyme)
     m_longestWordLabel->setObjectName("longestWordLabel");
     m_longestWordLabel->setFont(QFont("TimesNewRoman", 8));
     m_longestWordLabel->setText("Самое длинное слово: " + FindLongestWord(rhyme));
-    m_longestWordLabel->setAlignment(Qt::AlignLeft);
+    m_longestWordLabel->setAlignment(Qt::AlignRight);
     m_longestWordLabel->setFixedSize(width(), 20);
+
+    // Установка цвета текста в зависимости от темы
+    QString textColor = m_isDarkTheme ? "white" : "black";
+    m_longestWordLabel->setStyleSheet("color: " + textColor + ";");
+
     m_longestWordLabel->hide();
 }
 
@@ -201,7 +401,9 @@ QLabel* MainWindow::CreateNameLabel(const Person& person)
 {
     QLabel* nameLabel = new QLabel(person.name, this);
     nameLabel->setFont(QFont("TimesNewRoman", 10));
-    nameLabel->setStyleSheet("color:black; font-weight: bold;");
+    QString textColor = m_isDarkTheme ? "white" : "black";
+    nameLabel->setStyleSheet("color: " + textColor + "; font-weight: bold;");
+
     nameLabel->setAlignment(Qt::AlignLeft);
     nameLabel->setObjectName(person.name + "_name");
     nameLabel->setGeometry(width()/2-50, height()/2+50, 200, 20);
@@ -214,6 +416,9 @@ QLabel* MainWindow::CreateRhymeLabel(const Person& person)
     QLabel* rhymeLabel = new QLabel(this);
     rhymeLabel->setAlignment(Qt::AlignLeft);
     rhymeLabel->setFont(QFont("TimesNewRoman", 10));
+    QString textColor = m_isDarkTheme ? "white" : "black";
+    rhymeLabel->setStyleSheet("color: " + textColor + ";");
+
     rhymeLabel->setObjectName(person.name + "_rhyme");
     rhymeLabel->setGeometry(width()/2-50, height()/2+65, 200, 20);
     rhymeLabel->hide();
@@ -245,6 +450,7 @@ void MainWindow::RemoveCurrentPerson()
     QLabel* photoLabel = findChild<QLabel*>(currentName + "_photo");
     QLabel* nameLabel = findChild<QLabel*>(currentName + "_name");
     QLabel* rhymeLabel = findChild<QLabel*>(currentName + "_rhyme");
+
     if (photoLabel && nameLabel)
     {
         AnimateRemoval(photoLabel);
@@ -298,10 +504,41 @@ QString MainWindow::FindLongestWord(const QString& rhyme)
 
 void MainWindow::OnStartRhymeButtonClicked()
 {
-    if (m_rhymeRunning || m_persons.isEmpty()) return;
-    disconnect(m_ui->nextWordButton, &QPushButton::clicked, this, &MainWindow::OnStartRhymeButtonClicked);
-    if (!m_longestWordShowed) ShowLongestWordWithAnimation();
-    else ShowLongestWordStatic();
+    if (m_persons.isEmpty()) {
+        QMessageBox::warning(this, "Ошибка", "Не выбраны фотографии!");
+        return;
+    }
+
+    if (m_allRhymes.isEmpty()) {
+        QMessageBox::warning(this, "Ошибка", "Не выбран файл со считалочками!");
+        return;
+    }
+
+    if (m_rhymeRunning) return;
+
+    if (m_rhymeWords.isEmpty()) {
+        QString rhyme = SelectRandomRhyme(m_allRhymes);
+        if (rhyme.isEmpty()) {
+            QMessageBox::warning(this, "Ошибка", "Не удалось выбрать считалочку!");
+            return;
+        }
+        m_rhymeWords = rhyme.split(' ', Qt::SkipEmptyParts);
+        if (m_rhymeWords.isEmpty()) {
+            QMessageBox::warning(this, "Ошибка", "Считалочка пуста!");
+            return;
+        }
+        InitializeLongestWordLabel(rhyme);
+    }
+
+    disconnect(m_nextWordButton, &QPushButton::clicked, this, &MainWindow::OnNextWordButtonClicked);
+
+    if (!m_longestWordShowed) {
+        ShowLongestWordWithAnimation();
+    }
+    else {
+        ShowLongestWordStatic();
+    }
+
     StartRhyme();
 }
 
@@ -383,9 +620,18 @@ void MainWindow::HideAllRhymeLabels()
 
 void MainWindow::HighlightCurrentPerson()
 {
-    if (m_highlightedLabel)m_highlightedLabel->setStyleSheet("");
+    if (m_highlightedLabel) {
+        m_highlightedLabel->setStyleSheet("");
+    }
+
     m_highlightedLabel = findChild<QLabel*>(m_persons[m_currentIndex].name + "_photo");
-    if (m_highlightedLabel) m_highlightedLabel->setStyleSheet("border: 3px solid red; border-radius: 5px; ""background-color: rgba(255, 200, 200, 50);");
+    if (m_highlightedLabel) {
+        m_highlightedLabel->setStyleSheet(
+            "border: 3px solid red;"
+            "border-radius: 5px;"
+            "background-color: rgba(255, 200, 200, 50);"
+            );
+    }
 }
 
 void MainWindow::AnimateRemoval(QLabel* label)
@@ -416,6 +662,10 @@ void MainWindow::ShowWinnerLabel(QRect target)
 {
     QLabel* winnerText = new QLabel("Won!", this);
     winnerText->setFont(QFont("TimesNewRoman", 24, QFont::Bold));
+
+    QString textColor = m_isDarkTheme ? "white" : "black";
+    winnerText->setStyleSheet("color: " + textColor + ";");
+
     winnerText->setAlignment(Qt::AlignLeft);
     winnerText->setGeometry(-200, -200, 100, 100);
     winnerText->show();
