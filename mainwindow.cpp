@@ -15,6 +15,8 @@
 #include <QApplication>
 #include <QPalette>
 #include <QStyleHints> // Добавлено для QStyleHints
+#include <QMenuBar>
+#include <QFileDialog>
 
 using namespace std;
 
@@ -55,7 +57,10 @@ MainWindow::MainWindow(QWidget* parent)
     m_isDarkTheme = isSystemDarkTheme();
     applyThemeStyles();
 
+    CreateMenuBar();
     InitializeComponents();
+    SetupCurrentRhymeWordLabel();
+    SetupRhymeTimer();
 }
 
 
@@ -119,14 +124,124 @@ void MainWindow::applyThemeStyles()
 
 void MainWindow::InitializeComponents()
 {
+    setWindowTitle("Vulture Command);
     QRandomGenerator::securelySeeded();
     srand(time(0));
-    setWindowTitle("VultureCommand - Panov");
+
     SetupCurrentRhymeWordLabel();
     QVector<QString> rhymes = LoadRhymes("rhyme.txt");
     m_persons = LoadPhotos("photos");
     if (!InitializeGame(rhymes)) return;
     SetupRhymeTimer();
+
+    m_nextWordButton = m_ui->nextWordButton;
+    connect(m_ui->nextWordButton, &QPushButton::clicked, this, &MainWindow::OnNextWordButtonClicked);
+}
+
+bool MainWindow::InitializeGame()
+{
+    if (m_persons.isEmpty() || m_rhymeWords.isEmpty()) {
+        return false;
+    }
+
+    random_device rd;
+    mt19937 g(rd());
+    shuffle(m_persons.begin(), m_persons.end(), g);
+
+    m_currentIndex = rand() % m_persons.size();
+    DisplayPhotosInCircle(m_persons, m_firstTime);
+    m_firstTime = false;
+
+    return true;
+}
+
+
+void MainWindow::CreateMenuBar()
+{
+    QMenuBar* menuBar = new QMenuBar(this);
+    QMenu* fileMenu = menuBar->addMenu("Файл");
+
+    selectPhotosAction = new QAction("Выбрать папку с фото", this);
+    connect(selectPhotosAction, &QAction::triggered, this, &MainWindow::SelectPhotosFolder);
+    fileMenu->addAction(selectPhotosAction);
+
+    selectRhymesAction = new QAction("Выбрать файл со считалочками", this);
+    connect(selectRhymesAction, &QAction::triggered, this, &MainWindow::SelectRhymesFile);
+    fileMenu->addAction(selectRhymesAction);
+
+    setMenuBar(menuBar);
+}
+
+void MainWindow::SelectPhotosFolder()
+{
+    QString folderPath = QFileDialog::getExistingDirectory(
+        this,
+        "Выберите папку с фото",
+        QDir::homePath(),
+        QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks
+        );
+
+    if (!folderPath.isEmpty()) {
+        m_persons = LoadPhotos(folderPath);
+        if (m_persons.isEmpty()) {
+            QMessageBox::warning(this, "Ошибка",
+                                 "В папке нет поддерживаемых фото (png, jpg, jpeg, HEIC)!");
+        }
+        else {
+            QMessageBox::information(this, "Успешно",
+                                     QString("Загружено %1 фотографий!").arg(m_persons.size()));
+            DisplayPhotosInCircle(m_persons, true);
+
+            selectPhotosAction->setEnabled(false);
+            selectPhotosAction->setText("Фото загружены");
+        }
+    }
+}
+
+void MainWindow::SelectRhymesFile()
+{
+    QString filePath = QFileDialog::getOpenFileName(
+        this,
+        "Выберите файл со считалочками",
+        QDir::homePath(),
+        "Текстовые файлы (*.txt);;Все файлы (*)"
+        );
+
+    if (!filePath.isEmpty()) {
+        m_allRhymes = LoadRhymes(filePath); // Сохраняем все считалочки
+        if (m_allRhymes.isEmpty()) {
+            QMessageBox::warning(this, "Ошибка", "Файл пуст или не читается!");
+        }
+        else {
+            QMessageBox::information(this, "Успешно", "Считалочки загружены!");
+            selectRhymesAction->setEnabled(false);
+            selectRhymesAction->setText("Считалки загружены");
+        }
+    }
+}
+
+void MainWindow::ResetGame()
+{
+    QList<QLabel*> labels = findChildren<QLabel*>();
+    for (QLabel* label : labels) {
+        if (label != m_longestWordLabel && label != m_currentRhymeWordLabel) {
+            label->deleteLater();
+        }
+    }
+
+    m_firstTime = true;
+    m_longestWordShowed = false;
+    m_rhymeRunning = false;
+    m_currentIndex = 0;
+    m_currentWordIndex = 0;
+
+    if (!m_persons.isEmpty() && !m_rhymeWords.isEmpty()) {
+        DisplayPhotosInCircle(m_persons, true);
+        InitializeLongestWordLabel(m_rhymeWords.join(" "));
+    }
+    else {
+        QMessageBox::warning(this, "Ошибка", "Не хватает данных для запуска игры!");
+    }
 }
 
 void MainWindow::SetupCurrentRhymeWordLabel()
@@ -149,7 +264,6 @@ bool MainWindow::InitializeGame(const QVector<QString>& rhymes)
     random_device rd;
     mt19937 g(rd());
     shuffle(m_persons.begin(), m_persons.end(), g);
-    if (m_persons.isEmpty() || rhymes.isEmpty()) { ShowErrorMessage(); return false; }
     m_currentIndex = rand() % m_persons.size();
     DisplayPhotosInCircle(m_persons, m_firstTime);
     m_firstTime = false;
@@ -171,7 +285,7 @@ void MainWindow::InitializeLongestWordLabel(const QString& rhyme)
     m_longestWordLabel->setObjectName("longestWordLabel");
     m_longestWordLabel->setFont(QFont("TimesNewRoman", 8));
     m_longestWordLabel->setText("Самое длинное слово: " + FindLongestWord(rhyme));
-    m_longestWordLabel->setAlignment(Qt::AlignLeft);
+    m_longestWordLabel->setAlignment(Qt::AlignRight);
     m_longestWordLabel->setFixedSize(width(), 20);
 
     // Установка цвета текста в зависимости от темы
@@ -185,7 +299,6 @@ void MainWindow::SetupRhymeTimer()
 {
     m_rhymeTimer = new QTimer(this);
     connect(m_rhymeTimer, &QTimer::timeout, this, &MainWindow::UpdateRhymeWord);
-    connect(m_ui->nextWordButton, &QPushButton::clicked, this, &MainWindow::OnNextWordButtonClicked);
 }
 
 QVector<QString> MainWindow::LoadRhymes(const QString& filePath)
@@ -343,6 +456,7 @@ void MainWindow::RemoveCurrentPerson()
     QLabel* photoLabel = findChild<QLabel*>(currentName + "_photo");
     QLabel* nameLabel = findChild<QLabel*>(currentName + "_name");
     QLabel* rhymeLabel = findChild<QLabel*>(currentName + "_rhyme");
+
     if (photoLabel && nameLabel)
     {
         AnimateRemoval(photoLabel);
@@ -396,10 +510,41 @@ QString MainWindow::FindLongestWord(const QString& rhyme)
 
 void MainWindow::OnNextWordButtonClicked()
 {
-    if (m_rhymeRunning || m_persons.isEmpty()) return;
-    disconnect(m_ui->nextWordButton, &QPushButton::clicked, this, &MainWindow::OnNextWordButtonClicked);
-    if (!m_longestWordShowed) ShowLongestWordWithAnimation();
-    else ShowLongestWordStatic();
+    if (m_persons.isEmpty()) {
+        QMessageBox::warning(this, "Ошибка", "Не выбраны фотографии!");
+        return;
+    }
+
+    if (m_allRhymes.isEmpty()) {
+        QMessageBox::warning(this, "Ошибка", "Не выбран файл со считалочками!");
+        return;
+    }
+
+    if (m_rhymeRunning) return;
+
+    if (m_rhymeWords.isEmpty()) {
+        QString rhyme = SelectRandomRhyme(m_allRhymes);
+        if (rhyme.isEmpty()) {
+            QMessageBox::warning(this, "Ошибка", "Не удалось выбрать считалочку!");
+            return;
+        }
+        m_rhymeWords = rhyme.split(' ', Qt::SkipEmptyParts);
+        if (m_rhymeWords.isEmpty()) {
+            QMessageBox::warning(this, "Ошибка", "Считалочка пуста!");
+            return;
+        }
+        InitializeLongestWordLabel(rhyme);
+    }
+
+    disconnect(m_nextWordButton, &QPushButton::clicked, this, &MainWindow::OnNextWordButtonClicked);
+
+    if (!m_longestWordShowed) {
+        ShowLongestWordWithAnimation();
+    }
+    else {
+        ShowLongestWordStatic();
+    }
+
     StartRhyme();
 }
 
