@@ -531,7 +531,7 @@ void MainWindow::OnNextWordButtonClicked()
 
     if(m_firstTime){
         connect(m_ui->nextWordButton, &QPushButton::clicked, this, &MainWindow::OnPlayPauseButtonClicked);
-        m_ui->nextWordButton->setText("Start rhyme");
+        m_ui->nextWordButton->setText("Stop rhyme");
     }
     StartRhyme();
 }
