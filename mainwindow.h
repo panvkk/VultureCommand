@@ -23,7 +23,7 @@ public:
     ~MainWindow();
 
 private slots:
-    void OnStartRhymeButtonClicked();
+    void OnNextWordButtonClicked();
     void OnPlayPauseButtonClicked();
     void UpdateRhymeWord();
     void SelectPhotosFolder();
@@ -105,6 +105,7 @@ private:
     bool m_firstTime;
     bool m_longestWordShowed;
     bool m_rhymePaused;
+    QMenuBar* menuBar = nullptr;
     QLabel *m_highlightedLabel;
     QAction* selectPhotosAction = nullptr;
     QAction* selectRhymesAction = nullptr;

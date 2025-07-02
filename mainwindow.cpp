@@ -120,15 +120,9 @@ void MainWindow::applyThemeStyles()
 
 void MainWindow::InitializeComponents()
 {
-    setWindowTitle("Vulture Command);
+    setWindowTitle("Vulture Command");
     QRandomGenerator::securelySeeded();
     srand(time(0));
-
-    SetupCurrentRhymeWordLabel();
-    QVector<QString> rhymes = LoadRhymes("rhyme.txt");
-    m_persons = LoadPhotos("photos");
-    if (!InitializeGame(rhymes)) return;
-    SetupRhymeTimer();
 
     m_nextWordButton = m_ui->nextWordButton;
     connect(m_ui->nextWordButton, &QPushButton::clicked, this, &MainWindow::OnNextWordButtonClicked);
@@ -154,7 +148,7 @@ bool MainWindow::InitializeGame()
 
 void MainWindow::CreateMenuBar()
 {
-    QMenuBar* menuBar = new QMenuBar(this);
+    menuBar = new QMenuBar(this);
     QMenu* fileMenu = menuBar->addMenu("Файл");
 
     selectPhotosAction = new QAction("Выбрать папку с фото", this);
@@ -246,7 +240,7 @@ void MainWindow::SetupCurrentRhymeWordLabel()
     m_currentRhymeWordLabel->setAlignment(Qt::AlignCenter);
     m_currentRhymeWordLabel->setFont(QFont("TimesNewRoman", 14));
 
-    // Установка цвета текста в зависимости от темы
+    //Установка цвета текста в зависимости от темы
     QString textColor = m_isDarkTheme ? "white" : "black";
     m_currentRhymeWordLabel->setStyleSheet("color: " + textColor + "; font-weight: bold;");
 
@@ -257,6 +251,10 @@ void MainWindow::SetupCurrentRhymeWordLabel()
 
 bool MainWindow::InitializeGame(const QVector<QString>& rhymes)
 {
+    if (m_persons.isEmpty() || m_rhymeWords.isEmpty()) {
+        return false;
+    }
+
     random_device rd;
     mt19937 g(rd());
     shuffle(m_persons.begin(), m_persons.end(), g);
@@ -269,20 +267,14 @@ bool MainWindow::InitializeGame(const QVector<QString>& rhymes)
     return true;
 }
 
-void MainWindow::ShowErrorMessage()
-{
-    QMessageBox::critical(this, "Ошибка","\nПроверьте:\n1. Файл 'rhyme.txt';\n2. Папку 'photos';");
-    QTimer::singleShot(0, this, &QCoreApplication::quit);
-}
-
 void MainWindow::InitializeLongestWordLabel(const QString& rhyme)
 {
     m_longestWordLabel = new QLabel(this);
     m_longestWordLabel->setObjectName("longestWordLabel");
     m_longestWordLabel->setFont(QFont("TimesNewRoman", 8));
     m_longestWordLabel->setText("Самое длинное слово: " + FindLongestWord(rhyme));
-    m_longestWordLabel->setAlignment(Qt::AlignRight);
-    m_longestWordLabel->setFixedSize(width(), 20);
+    m_longestWordLabel->setAlignment(Qt::AlignLeft);
+    m_longestWordLabel->setGeometry(10, menuBar->height() + 5, width() - 20, 20);
 
     // Установка цвета текста в зависимости от темы
     QString textColor = m_isDarkTheme ? "white" : "black";
@@ -295,8 +287,6 @@ void MainWindow::SetupRhymeTimer()
 {
     m_rhymeTimer = new QTimer(this);
     connect(m_rhymeTimer, &QTimer::timeout, this, &MainWindow::UpdateRhymeWord);
-    connect(m_ui->nextWordButton, &QPushButton::clicked, this, &MainWindow::OnPlayPauseButtonClicked);
-    m_ui->nextWordButton->setText("Start rhyme");
 }
 
 QVector<QString> MainWindow::LoadRhymes(const QString& filePath)
@@ -502,7 +492,7 @@ QString MainWindow::FindLongestWord(const QString& rhyme)
     return longestWord;
 }
 
-void MainWindow::OnStartRhymeButtonClicked()
+void MainWindow::OnNextWordButtonClicked()
 {
     if (m_persons.isEmpty()) {
         QMessageBox::warning(this, "Ошибка", "Не выбраны фотографии!");
@@ -539,6 +529,10 @@ void MainWindow::OnStartRhymeButtonClicked()
         ShowLongestWordStatic();
     }
 
+    if(m_firstTime){
+        connect(m_ui->nextWordButton, &QPushButton::clicked, this, &MainWindow::OnPlayPauseButtonClicked);
+        m_ui->nextWordButton->setText("Start rhyme");
+    }
     StartRhyme();
 }
 
@@ -566,12 +560,12 @@ void MainWindow::OnPlayPauseButtonClicked()
 
 void MainWindow::ShowLongestWordWithAnimation()
 {
-    m_longestWordLabel->setGeometry(10, -20, width(), 20);
+    m_longestWordLabel->setGeometry(10, -20, width() -20, 20);
     m_longestWordLabel->show();
     QPropertyAnimation* anim = new QPropertyAnimation(m_longestWordLabel, "pos");
     anim->setDuration(1000);
     anim->setEasingCurve(QEasingCurve::OutBack);
-    anim->setEndValue(QPoint(10, 10));
+    anim->setEndValue(QPoint(10, menuBar->height() + 5));
     anim->start(QAbstractAnimation::DeleteWhenStopped);
     m_longestWordShowed = true;
 }
@@ -724,6 +718,7 @@ void MainWindow::StartRhyme()
 
 void MainWindow::FinishRhyme()
 {
+    m_ui->nextWordButton->setEnabled(false);
     m_rhymeTimer->stop();
     QTimer::singleShot(1000, this, [this]() {
         RemoveCurrentPerson();
