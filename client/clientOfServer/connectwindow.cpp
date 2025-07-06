@@ -1,4 +1,3 @@
-// connectwindow.cpp
 #include "connectwindow.h"
 #include "mainwindow.h"
 #include <QVBoxLayout>
@@ -13,24 +12,28 @@
 ConnectWindow::ConnectWindow(QWidget *parent)
     : QWidget(parent), m_socket(new QTcpSocket(this)), m_timeoutTimer(new QTimer(this))
 {
-    m_nameEdit = new QLineEdit;
-    m_hostEdit = new QLineEdit("localhost");
+    m_surnameEdit = new QLineEdit;
+    m_ipEdit = new QLineEdit("127.0.0.1");
     m_portEdit = new QLineEdit("12345");
     m_portEdit->setValidator(new QIntValidator(1, 65535, this));
+    m_messageEdit = new QLineEdit;
+    m_messageEdit->setPlaceholderText("Введите сообщение для сервера");
     m_connectButton = new QPushButton("Отправить сообщение");
     m_statusLabel = new QLabel("Введите данные и нажмите кнопку");
 
     QVBoxLayout *layout = new QVBoxLayout;
-    layout->addWidget(new QLabel("Имя студента:"));
-    layout->addWidget(m_nameEdit);
-    layout->addWidget(new QLabel("Хост:"));
-    layout->addWidget(m_hostEdit);
-    layout->addWidget(new QLabel("Порт:"));
+    layout->addWidget(new QLabel("Фамилия студента:"));
+    layout->addWidget(m_surnameEdit);
+    layout->addWidget(new QLabel("IP-адрес сервера:"));
+    layout->addWidget(m_ipEdit);
+    layout->addWidget(new QLabel("Порт сервера:"));
     layout->addWidget(m_portEdit);
+    layout->addWidget(new QLabel("Сообщение (необязательно):"));
+    layout->addWidget(m_messageEdit);
     layout->addWidget(m_connectButton);
     layout->addWidget(m_statusLabel);
     setLayout(layout);
-    setWindowTitle("Garson Client");
+    setWindowTitle("Клиент для сада");
 
     connect(m_connectButton, &QPushButton::clicked, this, &ConnectWindow::onConnectClicked);
     connect(m_socket, &QTcpSocket::connected, this, &ConnectWindow::onConnected);
@@ -41,29 +44,34 @@ ConnectWindow::ConnectWindow(QWidget *parent)
 
 void ConnectWindow::onConnectClicked()
 {
-    QString name = m_nameEdit->text().trimmed();
-    QString host = m_hostEdit->text().trimmed();
+    QString surname = m_surnameEdit->text().trimmed();
+    QString ip = m_ipEdit->text().trimmed();
     quint16 port = m_portEdit->text().toUShort();
 
-    if (name.isEmpty()) {
-        m_statusLabel->setText("Введите имя.");
+    if (surname.isEmpty()) {
+        m_statusLabel->setText("Ошибка: введите фамилию!");
         return;
     }
 
-    m_statusLabel->setText("Подключение...");
+    m_statusLabel->setText("Подключаемся к серверу...");
     resetConnection();
 
-    m_socket->connectToHost(host, port);
-    m_timeoutTimer->start(10000); // 10 секунд таймаут
+    m_socket->connectToHost(ip, port);
+    m_timeoutTimer->start(10000); // Таймаут 10 секунд
 }
 
 void ConnectWindow::onConnected()
 {
     m_timeoutTimer->stop();
-    QString name = m_nameEdit->text().trimmed();
-    QString message = QString("Hello, Garson, I'm %1!\n").arg(name);
+    QString surname = m_surnameEdit->text().trimmed();
+    QString message = m_messageEdit->text().trimmed();
+
+    if (message.isEmpty()) {
+        message = QString("Привет, Гарсон, я %1!").arg(surname);
+    }
+
     m_socket->write(message.toUtf8());
-    m_statusLabel->setText("Сообщение отправлено. Ожидаем ответ...");
+    m_statusLabel->setText("Сообщение отправлено. Ждем ответ...");
 }
 
 void ConnectWindow::onReadyRead()
@@ -71,16 +79,16 @@ void ConnectWindow::onReadyRead()
     m_timeoutTimer->stop();
     QByteArray response = m_socket->readAll();
     QString responseStr = QString::fromUtf8(response).trimmed();
-    qDebug() << "Ответ от сервера:" << responseStr;
+    qDebug() << "Ответ сервера:" << responseStr;
 
-    if (responseStr.contains("Go To Sleep To the Garden!")) {
-        QString name = m_nameEdit->text().trimmed();
-        MainWindow *w = new MainWindow(name);
+    if (responseStr.contains("Иди спать в сад!")) {
+        QString surname = m_surnameEdit->text().trimmed();
+        MainWindow *w = new MainWindow(surname);
         w->show();
         this->hide();
     } else {
-        QMessageBox::information(this, "Ответ от сервера", responseStr);
-        m_statusLabel->setText("Ответ получен.");
+        QMessageBox::information(this, "Ответ сервера", responseStr);
+        m_statusLabel->setText("Ответ получен: " + responseStr);
     }
 }
 
@@ -89,14 +97,14 @@ void ConnectWindow::onErrorOccurred(QAbstractSocket::SocketError socketError)
     Q_UNUSED(socketError);
     m_timeoutTimer->stop();
     QMessageBox::critical(this, "Ошибка подключения", m_socket->errorString());
-    m_statusLabel->setText("Ошибка подключения. Попробуйте снова.");
+    m_statusLabel->setText("Ошибка: " + m_socket->errorString());
 }
 
 void ConnectWindow::onTimeout()
 {
     m_socket->abort();
-    QMessageBox::critical(this, "Ошибка подключения", "Превышено время ожидания подключения (10 секунд)");
-    m_statusLabel->setText("Ошибка подключения. Попробуйте снова.");
+    QMessageBox::critical(this, "Ошибка", "Превышено время ожидания подключения!");
+    m_statusLabel->setText("Ошибка: таймаут подключения");
 }
 
 void ConnectWindow::resetConnection()

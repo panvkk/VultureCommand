@@ -8,10 +8,15 @@ class MainWindow : public QMainWindow
 {
     Q_OBJECT
 public:
-    explicit MainWindow(const QString& studentName, QWidget *parent = nullptr);
+    explicit MainWindow(const QString& surname, QWidget *parent = nullptr);
 
 private:
-    QLabel *m_label;
+    void createGardenImage();
+    void loadStudentPhoto();
+
+    QLabel *m_gardenLabel;
+    QLabel *m_photoLabel;
+    QString m_surname;
 };
 
 #endif // MAINWINDOW_H

@@ -1,4 +1,3 @@
-// connectwindow.h
 #ifndef CONNECTWINDOW_H
 #define CONNECTWINDOW_H
 
@@ -26,9 +25,10 @@ private slots:
 private:
     void resetConnection();
 
-    QLineEdit *m_nameEdit;
-    QLineEdit *m_hostEdit;
+    QLineEdit *m_surnameEdit;
+    QLineEdit *m_ipEdit;
     QLineEdit *m_portEdit;
+    QLineEdit *m_messageEdit;
     QPushButton *m_connectButton;
     QLabel *m_statusLabel;
     QTcpSocket *m_socket;
