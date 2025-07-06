@@ -13,8 +13,8 @@ ConnectWindow::ConnectWindow(QWidget *parent)
     : QWidget(parent), m_socket(new QTcpSocket(this)), m_timeoutTimer(new QTimer(this))
 {
     m_surnameEdit = new QLineEdit;
-    m_ipEdit = new QLineEdit("127.0.0.1");
-    m_portEdit = new QLineEdit("12345");
+    m_ipEdit = new QLineEdit("192.168.0.101");
+    m_portEdit = new QLineEdit("8080");
     m_portEdit->setValidator(new QIntValidator(1, 65535, this));
     m_messageEdit = new QLineEdit;
     m_messageEdit->setPlaceholderText("Введите сообщение для сервера");
@@ -33,7 +33,7 @@ ConnectWindow::ConnectWindow(QWidget *parent)
     layout->addWidget(m_connectButton);
     layout->addWidget(m_statusLabel);
     setLayout(layout);
-    setWindowTitle("Клиент для сада");
+    setWindowTitle("Client");
 
     connect(m_connectButton, &QPushButton::clicked, this, &ConnectWindow::onConnectClicked);
     connect(m_socket, &QTcpSocket::connected, this, &ConnectWindow::onConnected);
@@ -47,9 +47,16 @@ void ConnectWindow::onConnectClicked()
     QString surname = m_surnameEdit->text().trimmed();
     QString ip = m_ipEdit->text().trimmed();
     quint16 port = m_portEdit->text().toUShort();
+    QString message = m_messageEdit->text().trimmed();
 
     if (surname.isEmpty()) {
         m_statusLabel->setText("Ошибка: введите фамилию!");
+        return;
+    }
+
+    // Проверка на соответствие фамилий
+    if (!message.isEmpty() && message.contains("I'm") && !message.contains(surname, Qt::CaseInsensitive)) {
+        m_statusLabel->setText("Обманщик! Ты кто вообще? ОПРЕДЕЛИСЬ с фамилией!!!");
         return;
     }
 
@@ -60,16 +67,25 @@ void ConnectWindow::onConnectClicked()
     m_timeoutTimer->start(10000); // Таймаут 10 секунд
 }
 
+
 void ConnectWindow::onConnected()
 {
     m_timeoutTimer->stop();
-    QString surname = m_surnameEdit->text().trimmed();
-    QString message = m_messageEdit->text().trimmed();
-
-    if (message.isEmpty()) {
-        message = QString("Привет, Гарсон, я %1!").arg(surname);
+    if(m_socket->state() != QTcpSocket::ConnectedState) {
+        qDebug() << "Ошибка: соединение не установлено";
+        return;
     }
 
+    QString surname = m_surnameEdit->text().trimmed();
+    QString message = m_messageEdit->text().trimmed() + "\n";
+    if(message.isEmpty()) message = QString("Hello, Garson, I'm %1!\n").arg(surname);
+
+    /*qint64 bytesWritten = m_socket->write(message.toUtf8());
+    if(bytesWritten == -1) {
+        qDebug() << "Ошибка отправки:" << m_socket->errorString();
+    } else {
+        qDebug() << "Отправлено" << bytesWritten << "байт";
+    }*/
     m_socket->write(message.toUtf8());
     m_statusLabel->setText("Сообщение отправлено. Ждем ответ...");
 }
@@ -81,7 +97,7 @@ void ConnectWindow::onReadyRead()
     QString responseStr = QString::fromUtf8(response).trimmed();
     qDebug() << "Ответ сервера:" << responseStr;
 
-    if (responseStr.contains("Иди спать в сад!")) {
+    if (responseStr.contains("Go To Sleep To the Garden!")) {
         QString surname = m_surnameEdit->text().trimmed();
         MainWindow *w = new MainWindow(surname);
         w->show();
@@ -96,7 +112,7 @@ void ConnectWindow::onErrorOccurred(QAbstractSocket::SocketError socketError)
 {
     Q_UNUSED(socketError);
     m_timeoutTimer->stop();
-    QMessageBox::critical(this, "Ошибка подключения", m_socket->errorString());
+    //QMessageBox::critical(this, "Ошибка подключения", m_socket->errorString());
     m_statusLabel->setText("Ошибка: " + m_socket->errorString());
 }
 

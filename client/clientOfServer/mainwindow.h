@@ -11,11 +11,10 @@ public:
     explicit MainWindow(const QString& surname, QWidget *parent = nullptr);
 
 private:
-    void createGardenImage();
-    void loadStudentPhoto();
+    void createCombinedImage();  // Изменили название метода
+    void loadStudentPhoto();    // Этот метод теперь используется внутри createCombinedImage
 
-    QLabel *m_gardenLabel;
-    QLabel *m_photoLabel;
+    QLabel *m_combinedLabel;   // Заменили два QLabel на один
     QString m_surname;
 };
 
