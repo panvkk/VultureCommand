@@ -78,7 +78,7 @@ void ConnectWindow::onConnected()
 
     QString surname = m_surnameEdit->text().trimmed();
     QString message = m_messageEdit->text().trimmed() + "\n";
-    if(message.isEmpty()) message = QString("Hello, Garson, I'm %1!\n").arg(surname);
+    if(message == "\n") message = QString("Hello, Garson, I'm %1!\n").arg(surname);
 
     /*qint64 bytesWritten = m_socket->write(message.toUtf8());
     if(bytesWritten == -1) {
