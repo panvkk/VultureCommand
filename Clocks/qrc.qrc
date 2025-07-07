@@ -1,0 +1,9 @@
+<RCC>
+    <qresource prefix="/">
+        <file>images/dali_background.jpg</file>
+        <file>sounds/boom.wav</file>
+        <file>sounds/cuckoo.wav</file>
+        <file>sounds/tack.wav</file>
+        <file>sounds/tick.wav</file>
+    </qresource>
+</RCC>
