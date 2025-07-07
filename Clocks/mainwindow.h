@@ -45,9 +45,10 @@ private slots:
     void setFantasyHands();
 
     // Music
-    void playTrack1();
-    void playTrack2();
-    void playTrack3();
+    void playMusicTrack1();
+    void playMusicTrack2();
+    void playMusicTrack3();
+    void handleMusicStateChanged(QMediaPlayer::PlaybackState state);
 
     // Time format
     void setNumericFormat();
@@ -78,6 +79,10 @@ private:
     QSoundEffect boomSound;
     QSoundEffect cuckooSound;
     QMediaPlayer *backgroundMusic;
+
+    QMediaPlayer *musicPlayer;
+    QAudioOutput *audioOutput;
+    QString currentTrack;
 
     int lastChimedHour;
     bool cuckooPlayed;

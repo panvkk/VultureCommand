@@ -6,6 +6,8 @@
 #include <QTimeEdit>
 #include <QInputDialog>
 #include <QPushButton>
+#include <QAudioOutput>
+#include <QPainterPath>
 #include <QVBoxLayout>
 #include <QAction>
 #include <QFileDialog>
@@ -24,6 +26,8 @@ MainWindow::MainWindow(QWidget *parent)
         "QMenuBar::item { background: transparent; padding: 5px 10px; }"
         "QMenuBar::item:selected { background: #d0d0d0; }"
         );
+
+    currentHandStyle = "classic";
 
     // Initialize sounds
     tickSound.setSource(QUrl("qrc:/sounds/tick.wav"));
@@ -86,10 +90,18 @@ void MainWindow::createMenus()
     handMenu->addAction(tr("Фэнтези"), this, &MainWindow::setFantasyHands);
 
     // Music submenu
+    // Инициализация аудио
+    musicPlayer = new QMediaPlayer(this);
+    audioOutput = new QAudioOutput(this);
+    musicPlayer->setAudioOutput(audioOutput);
+    audioOutput->setVolume(0.5); // 50% громкости по умолчанию
+
+    connect(musicPlayer, &QMediaPlayer::playbackStateChanged, this, &MainWindow::handleMusicStateChanged);
+
     QMenu *musicMenu = mainMenu->addMenu(tr("Музыка"));
-    musicMenu->addAction(tr("Птицы"), this, &MainWindow::playTrack1);
-    musicMenu->addAction(tr("Напряжение"), this, &MainWindow::playTrack2);
-    musicMenu->addAction(tr("Триумф"), this, &MainWindow::playTrack3);
+    musicMenu->addAction(tr("Птицы"), this, &MainWindow::playMusicTrack1);
+    musicMenu->addAction(tr("Напряжение"), this, &MainWindow::playMusicTrack2);
+    musicMenu->addAction(tr("Триумф"), this, &MainWindow::playMusicTrack3);
 
     // Statistics menu
     QMenu *statsMenu = menuBar()->addMenu(tr("Статистика"));
@@ -249,7 +261,6 @@ void MainWindow::showHelp()
     QMessageBox::information(this, tr("Помощь"), helpText);
 }
 
-
 // Implement all the theme setting functions
 void MainWindow::setSeasonMixTheme() {
     if(!background.load(":/images/season_mix.jpg")) {
@@ -308,23 +319,55 @@ void MainWindow::setFatePredictionTheme() {
     background = background.scaled(this->size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
 }
 
-void MainWindow::setClassicHands() { currentHandStyle = "classic"; update(); }
-void MainWindow::setModernHands() { currentHandStyle = "modern"; update(); }
-void MainWindow::setFantasyHands() { currentHandStyle = "fantasy"; update(); }
-
-void MainWindow::playTrack1() {
-    backgroundMusic->setSource(QUrl("qrc:/music/birds.wav"));
-    backgroundMusic->play();
+void MainWindow::setClassicHands()
+{
+    currentHandStyle = "classic";
+    update();
+    QMessageBox::information(this, tr("Стиль стрелок"), tr("Установлен классический стиль стрелок"));
 }
 
-void MainWindow::playTrack2() {
-    backgroundMusic->setSource(QUrl("qrc:/music/tension.wav"));
-    backgroundMusic->play();
+void MainWindow::setModernHands()
+{
+    currentHandStyle = "modern";
+    update();
+    QMessageBox::information(this, tr("Стиль стрелок"), tr("Установлен современный стиль стрелок"));
 }
 
-void MainWindow::playTrack3() {
-    backgroundMusic->setSource(QUrl("qrc:/music/triumph.wav"));
-    backgroundMusic->play();
+void MainWindow::setFantasyHands()
+{
+    currentHandStyle = "fantasy";
+    update();
+    QMessageBox::information(this, tr("Стиль стрелок"), tr("Установлен фэнтезийный стиль стрелок"));
+}
+
+void MainWindow::playMusicTrack1()
+{
+    currentTrack = "qrc:/sounds/birds.wav";
+    musicPlayer->setSource(QUrl(currentTrack));
+    musicPlayer->play();
+}
+
+void MainWindow::playMusicTrack2()
+{
+    currentTrack = "qrc:/sounds/tension.wav";
+    musicPlayer->setSource(QUrl(currentTrack));
+    musicPlayer->play();
+}
+
+void MainWindow::playMusicTrack3()
+{
+    currentTrack = "qrc:/sounds/triumph.wav";
+    musicPlayer->setSource(QUrl(currentTrack));
+    musicPlayer->play();
+}
+
+void MainWindow::handleMusicStateChanged(QMediaPlayer::PlaybackState state)
+{
+    if (state == QMediaPlayer::StoppedState && !currentTrack.isEmpty()) {
+        // Если трек закончился - воспроизводим его снова
+        musicPlayer->setSource(QUrl(currentTrack));
+        musicPlayer->play();
+    }
 }
 
 void MainWindow::setNumericFormat() { currentTimeFormat = "numeric"; update(); }
@@ -369,22 +412,32 @@ void MainWindow::paintEvent(QPaintEvent *event)
 
 void MainWindow::updateClock()
 {
-    if (!useCustomTime) {
-        customTime = QTime::currentTime();
+    QTime currentRealTime = QTime::currentTime();
+
+    // Инициализация при первом запуске
+    static bool firstUpdate = true;
+    if (firstUpdate) {
+        lastSecond = currentRealTime.second();
+        isTick = true;
+        firstUpdate = false;
     }
 
-    QTime currentTime = QTime::currentTime();
-    int currentSecond = currentTime.second();
-    int currentHour = currentTime.hour();
-    int currentMinute = currentTime.minute();
+    if (!useCustomTime) {
+        customTime = currentRealTime;
+    }
 
     // Тик-так каждую секунду
+    int currentSecond = currentRealTime.second();
     if (currentSecond != lastSecond) {
         if (isTick) tickSound.play();
         else tockSound.play();
         isTick = !isTick;
         lastSecond = currentSecond;
     }
+
+    // Остальная логика обновления часов
+    int currentHour = currentRealTime.hour();
+    int currentMinute = currentRealTime.minute();
 
     // Сбрасываем флаги в начале нового часа
     if (currentMinute == 0 && currentSecond == 0) {
@@ -395,12 +448,10 @@ void MainWindow::updateClock()
         }
     }
 
-    // Проигрываем кукушку или бой часов только если еще не проигрывали в этот час
+    // Проигрываем кукушку или бой часов
     if (currentMinute == 0 && currentSecond == 0) {
         if (!hourChimePlayed && !cuckooPlayed) {
             playHourChime(currentHour);
-
-            // Устанавливаем флаги
             if (currentHour == 12 || currentHour == 0) {
                 cuckooPlayed = true;
             } else {
@@ -475,12 +526,110 @@ void MainWindow::drawHand(QPainter &painter, double angle, int length, int width
 
     int centerX = this->width() / 2;
     int centerY = this->height() / 2;
-    angle = (angle - 90) * M_PI / 180;
-    int x = centerX + length * cos(angle);
-    int y = centerY + length * sin(angle);
+    angle = (angle - 90) * M_PI / 180; // Конвертируем в радианы и смещаем на 90°
 
-    painter.setPen(QPen(color, width));
-    painter.drawLine(centerX, centerY, x, y);
+    if (currentHandStyle == "classic") {
+        // Улучшенные классические стрелки
+        QLinearGradient gradient(centerX, centerY,
+                                centerX + length*cos(angle),
+                                centerY + length*sin(angle));
+        gradient.setColorAt(0, color.darker(120));
+        gradient.setColorAt(1, color.lighter(120));
+
+        painter.setPen(QPen(QBrush(gradient), width));
+        painter.setBrush(Qt::NoBrush);
+
+        QPointF endPoint(centerX + length*cos(angle),
+                        centerY + length*sin(angle));
+        painter.drawLine(QPointF(centerX, centerY), endPoint);
+
+        // Декоративный круг в основании
+        painter.setBrush(gradient);
+        painter.drawEllipse(QPointF(centerX, centerY), width*1.5, width*1.5);
+    }
+    else if (currentHandStyle == "modern") {
+        // Стильные современные стрелки с градиентом и тенью
+        QPainterPath path;
+        QPointF tip(centerX + length*cos(angle), centerY + length*sin(angle));
+
+        // Создаем форму стрелки
+        path.moveTo(tip);
+        path.lineTo(centerX + width*2*cos(angle + M_PI/2),
+                   centerY + width*2*sin(angle + M_PI/2));
+        path.lineTo(centerX + width*0.3*cos(angle + M_PI),
+                   centerY + width*0.3*sin(angle + M_PI));
+        path.lineTo(centerX + width*2*cos(angle - M_PI/2),
+                   centerY + width*2*sin(angle - M_PI/2));
+        path.closeSubpath();
+
+        // Градиентная заливка
+        QLinearGradient gradient(centerX, centerY, tip.x(), tip.y());
+        gradient.setColorAt(0, color.darker(150));
+        gradient.setColorAt(0.7, color);
+        gradient.setColorAt(1, color.lighter(150));
+
+        // Тень
+        painter.setPen(QPen(QColor(0, 0, 0, 50), 1));
+        painter.setBrush(QColor(0, 0, 0, 30));
+        painter.drawPath(path.translated(2, 2));
+
+        // Основная стрелка
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(gradient);
+        painter.drawPath(path);
+    }
+    else if (currentHandStyle == "fantasy") {
+        // Фэнтезийные стрелки с орнаментом
+        QPainterPath path;
+        QPointF tip(centerX + length*cos(angle), centerY + length*sin(angle));
+
+        // Основная линия с волнообразными краями
+        for (float t = 0; t <= 1.0; t += 0.05) {
+            float currentLength = t * length;
+            float waveWidth = width * (1 + 0.3*sin(t * M_PI * 5));
+
+            QPointF point(
+                centerX + currentLength*cos(angle) + waveWidth*cos(angle + M_PI/2),
+                centerY + currentLength*sin(angle) + waveWidth*sin(angle + M_PI/2)
+            );
+
+            if (t == 0) path.moveTo(point);
+            else path.lineTo(point);
+        }
+
+        for (float t = 1.0; t >= 0; t -= 0.05) {
+            float currentLength = t * length;
+            float waveWidth = width * (1 + 0.3*sin(t * M_PI * 5));
+
+            QPointF point(
+                centerX + currentLength*cos(angle) - waveWidth*cos(angle + M_PI/2),
+                centerY + currentLength*sin(angle) - waveWidth*sin(angle + M_PI/2)
+            );
+
+            path.lineTo(point);
+        }
+
+        path.closeSubpath();
+
+        // Декоративные элементы
+        QPainterPath decorPath;
+        for (int i = 1; i <= 3; i++) {
+            float r = length * 0.2 * i;
+            decorPath.addEllipse(QPointF(centerX + r * cos(angle + M_PI / 2), centerY + r * sin(angle + M_PI / 2)), width * 0.3, width * 0.3);
+            decorPath.addEllipse(QPointF(centerX + r * cos(angle + M_PI / 2), centerY + r * sin(angle + M_PI / 2)), width * 0.3, width * 0.3);
+        }
+
+        // Рисуем с градиентом
+        QRadialGradient gradient(centerX, centerY, length*1.2);
+        gradient.setColorAt(0, QColor(200, 160, 0));
+        gradient.setColorAt(1, QColor(150, 50, 0));
+
+        painter.setPen(QPen(Qt::black, 1));
+        painter.setBrush(gradient);
+        painter.drawPath(path);
+        painter.setBrush(Qt::white);
+        painter.drawPath(decorPath);
+    }
 
     painter.restore();
 }
