@@ -5,5 +5,16 @@
         <file>sounds/cuckoo.wav</file>
         <file>sounds/tack.wav</file>
         <file>sounds/tick.wav</file>
+        <file>images/belarus.jpg</file>
+        <file>images/cloudy.jpg</file>
+        <file>images/cold.jpg</file>
+        <file>images/fate_prediction.jpg</file>
+        <file>images/peach_gloom.jpg</file>
+        <file>images/peach_grape.jpg</file>
+        <file>images/season_mix.jpg</file>
+        <file>images/sunny_glade.jpg</file>
+        <file>sounds/birds.wav</file>
+        <file>sounds/tension.wav</file>
+        <file>sounds/triumph.wav</file>
     </qresource>
 </RCC>
