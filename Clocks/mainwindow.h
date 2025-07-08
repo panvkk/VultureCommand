@@ -21,6 +21,7 @@ public:
 
 protected:
     void paintEvent(QPaintEvent *event) override;
+    void closeEvent(QCloseEvent *event) override;
 
 private slots:
     void updateClock();
@@ -56,11 +57,18 @@ private slots:
     void setManualInput();
     void setVerbalFormat();
 
+    //Tests
+    void saveTestSessions();
+
     void showNumericTimeDialog();
     void showTimerInputDialog();
     void setCustomTime(const QTime &time);
 
 private:
+    int totalSessions = 0;
+    int totalDuration = 0;
+    QTime startTime;
+    QVector<QPair<QTime, QTime>> testSessions; // Пары (время запуска, время завершения)
     void createMenus();
     void drawClockFace(QPainter &painter);
     void drawHand(QPainter &painter, double angle, int length, int width, QColor color);

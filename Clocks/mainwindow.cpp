@@ -12,11 +12,13 @@
 #include <QAction>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QTextBrowser>
 
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
+    startTime = QTime::currentTime();
     showSplash = true;
     setFixedSize(800, 600);
 
@@ -53,10 +55,40 @@ MainWindow::MainWindow(QWidget *parent)
     currentTimeFormat = "numeric";
 
     createMenus();
+
+    // Загрузка сохраненной статистики
+    QFile file("statistics.txt");
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QTextStream in(&file);
+        while (!in.atEnd()) {
+            QString line = in.readLine();
+            QStringList parts = line.split(" | ");
+            if (parts.size() == 2) {
+                QStringList times = parts[0].split(" - ");
+                if (times.size() == 2) {
+                    QTime start = QTime::fromString(times[0], "HH:mm:ss");
+                    QTime end = QTime::fromString(times[1], "HH:mm:ss");
+                    if (start.isValid() && end.isValid()) {
+                        testSessions.append(qMakePair(start, end));
+                        int duration = start.secsTo(end);
+                        totalDuration += duration;
+                    }
+                }
+            }
+        }
+        file.close();
+    }
+    totalSessions = testSessions.size();
 }
 
 MainWindow::~MainWindow()
 {
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    saveTestSessions();
+    QMainWindow::closeEvent(event);
 }
 
 void MainWindow::createMenus()
@@ -126,6 +158,127 @@ void MainWindow::createMenus()
     QMenu *helpMenu = menuBar()->addMenu(tr("Помощь"));
     QAction *helpAction = helpMenu->addAction(tr("О программе"));
     connect(helpAction, &QAction::triggered, this, &MainWindow::showHelp);
+}
+
+void MainWindow::saveTestSessions()
+{
+    QTime endTime = QTime::currentTime();
+    int duration = startTime.secsTo(endTime);
+
+    testSessions.append(qMakePair(startTime, endTime));
+    totalSessions++;
+    totalDuration += duration;
+
+    // Сохраняем в файл при каждом закрытии
+    QFile file("statistics.txt");
+    if (file.open(QIODevice::WriteOnly | QIODevice::Append | QIODevice::Text)) {
+        QTextStream stream(&file);
+        stream << startTime.toString("HH:mm:ss") << " - "
+               << endTime.toString("HH:mm:ss") << " | "
+               << duration << " сек.\n";
+        file.close();
+    }
+
+    startTime = QTime::currentTime(); // Сбрасываем для следующей сессии
+}
+
+void MainWindow::showStatistics()
+{
+    // Загружаем историю из файла, если она есть
+    QVector<QPair<QString, QString>> history;
+    QFile file("statistics.txt");
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QTextStream in(&file);
+        while (!in.atEnd()) {
+            QString line = in.readLine();
+            QStringList parts = line.split(" | ");
+            if (parts.size() == 2) {
+                history.append(qMakePair(parts[0], parts[1]));
+            }
+        }
+        file.close();
+    }
+
+    // Формируем текст статистики
+    QString stats = tr("<h2>Статистика работы часов</h2>");
+
+    // Общая статистика
+    stats += tr("<h3>Общие показатели:</h3>");
+    stats += tr("<p>Всего сеансов: <b>%1</b></p>").arg(totalSessions);
+    stats += tr("<p>Общее время работы: <b>%1 мин. %2 сек.</b></p>")
+                 .arg(totalDuration / 60).arg(totalDuration % 60);
+    stats += tr("<p>Средняя продолжительность: <b>%1 сек.</b></p>")
+                 .arg(totalSessions > 0 ? totalDuration / totalSessions : 0);
+
+    // Последние 5 сеансов
+    stats += tr("<h3>Последние сеансы:</h3>");
+    stats += "<table border='1' cellpadding='5' style='border-collapse: collapse;'>";
+    stats += "<tr><th>№</th><th>Время запуска</th><th>Время завершения</th><th>Длительность</th></tr>";
+
+    int startIdx = qMax(0, testSessions.size() - 5);
+    for (int i = startIdx; i < testSessions.size(); ++i) {
+        auto session = testSessions[i];
+        int duration = session.first.secsTo(session.second);
+        stats += QString("<tr><td>%1</td><td>%2</td><td>%3</td><td>%4 сек.</td></tr>")
+                     .arg(i+1)
+                     .arg(session.first.toString("HH:mm:ss"))
+                     .arg(session.second.toString("HH:mm:ss"))
+                     .arg(duration);
+    }
+    stats += "</table>";
+
+    // Полная история (если есть)
+    if (!history.isEmpty()) {
+        stats += tr("<h3>Полная история:</h3>");
+        stats += "<table border='1' cellpadding='5' style='border-collapse: collapse;'>";
+        stats += "<tr><th>№</th><th>Период работы</th><th>Длительность</th></tr>";
+
+        for (int i = 0; i < history.size(); ++i) {
+            stats += QString("<tr><td>%1</td><td>%2</td><td>%3</td></tr>")
+            .arg(i+1)
+                .arg(history[i].first)
+                .arg(history[i].second);
+        }
+        stats += "</table>";
+    }
+
+    // Создаем диалог
+    QDialog statsDialog(this);
+    statsDialog.setWindowTitle(tr("Статистика работы"));
+    statsDialog.resize(600, 500);
+
+    QTextBrowser *textBrowser = new QTextBrowser(&statsDialog);
+    textBrowser->setHtml(stats);
+
+    QPushButton *saveButton = new QPushButton(tr("Сохранить в файл"), &statsDialog);
+    QPushButton *closeButton = new QPushButton(tr("Закрыть"), &statsDialog);
+
+    connect(saveButton, &QPushButton::clicked, [this, stats]() {
+        QString fileName = QFileDialog::getSaveFileName(this, tr("Сохранить статистику"),
+                                                        "statistics_report.html",
+                                                        tr("HTML файлы (*.html);;Текстовые файлы (*.txt)"));
+        if (!fileName.isEmpty()) {
+            QFile file(fileName);
+            if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                QTextStream stream(&file);
+                stream << stats;
+                file.close();
+                QMessageBox::information(this, tr("Сохранено"), tr("Статистика сохранена в файл."));
+            }
+        }
+    });
+
+    connect(closeButton, &QPushButton::clicked, &statsDialog, &QDialog::close);
+
+    QVBoxLayout *layout = new QVBoxLayout(&statsDialog);
+    layout->addWidget(textBrowser);
+
+    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    buttonLayout->addWidget(saveButton);
+    buttonLayout->addWidget(closeButton);
+    layout->addLayout(buttonLayout);
+
+    statsDialog.exec();
 }
 
 void MainWindow::showNumericTimeDialog()
@@ -225,27 +378,6 @@ void MainWindow::openClock()
     background = background.scaled(this->size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
 
     update();
-}
-
-void MainWindow::showStatistics()
-{
-    QString stats = tr("Результаты тестирования:\n"
-                       "Время запуска программы: 22:51:48\n"
-                       "Время завершения программы: 22:51:53\n"
-                       "Продолжительность работы: 0 минут 5 секунд\n"
-                       "Максимальное время тестирования: 0 минут 56 секунд\n"
-                       "Минимальное время тестирования: 0 минут 1 секунд\n\n"
-                       "|    | Сохранить результат | Выйти |\n"
-                       "|---|---|---|\n"
-                       "|    | Время запуска    | Время завершения    | Продолжительность |\n"
-                       "| 1   | 16:33:34    | 16:33:39    | 5    |\n"
-                       "| 2   | 16:33:47    | 16:33:48    | 1    |\n"
-                       "| 3   | 16:33:59    | 16:34:05    | 6    |\n"
-                       "| 4   | 16:34:16    | 16:35:06    | 50    |\n"
-                       "| 5   | 16:35:54    | 16:35:55    | 1    |\n"
-                       "| 6   | 16:36:01    | 16:36:57    | 56    |");
-
-    QMessageBox::information(this, tr("Статистика"), stats);
 }
 
 void MainWindow::showHelp()
