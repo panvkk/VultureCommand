@@ -1,10 +1,10 @@
-#ifndef REPORT_H
-#define REPORT_H
+#ifndef WINNERREPORT_H
+#define WINNERREPORT_H
 
 #include <QString>
 #include <QFile>
 
-class Report {
+class WinnerReport {
 private:
     // Дата: день - 1 байт, месяц - 1 байт, год - 2 байта
     char day;       // 1 байт
@@ -54,4 +54,4 @@ public:
     void loadFromBinaryFile(const QString& filename);
 };
 
-#endif // REPORT_H
+#endif // WINNERREPORT_H

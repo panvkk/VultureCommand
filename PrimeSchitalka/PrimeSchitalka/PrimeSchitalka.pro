@@ -7,11 +7,13 @@ TEMPLATE = app
 SOURCES += main.cpp \
            mainwindow.cpp \
            person.cpp \
-    report.cpp
+    report.cpp \
+    winnerReport.cpp
 
 HEADERS += mainwindow.h \
            person.h \
-    report.h
+    report.h \
+    winnerReport.h
 
 RESOURCES += \
     resources.qrc \

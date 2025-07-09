@@ -3,10 +3,15 @@
 int Report::getDay() const { return static_cast<unsigned char>(day); }
 int Report::getMonth() const { return static_cast<unsigned char>(month); }
 int Report::getYear() const { return static_cast<unsigned short>(year); }
-int Report::getCommand() const { return static_cast<unsigned char>(command); }
+
+int Report::getHours() const { return static_cast<unsigned char>(hours); }
+int Report::getMinutes() const { return static_cast<unsigned char>(minutes); }
+int Report::getSeconds() const { return static_cast<unsigned char>(seconds); }
+
 int Report::getParticipantCount() const { return static_cast<unsigned short>(participantCount); }
 int Report::getStartingParticipant() const { return static_cast<unsigned char>(startingParticipant); }
 int Report::getWinnerNumber() const { return static_cast<unsigned char>(winnerNumber); }
+
 QString Report::getRhymeText() const { return QString::fromLocal8Bit(rhymeText, 240).trimmed(); }
 QString Report::getWinnerName() const { return QString::fromLocal8Bit(winnerName, 20).trimmed(); }
 
