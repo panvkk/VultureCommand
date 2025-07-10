@@ -10,20 +10,14 @@ SOURCES = \
     clienthandler.cpp \
     main.cpp \
     mainwindow.cpp \
-    clienthandler.cpp \
     photodisplay.cpp \
-    server.cpp \
-    server.cpp \
-    photodisplay.cpp
+    server.cpp
 
 HEADERS = \
     clienthandler.h \
     mainwindow.h \
-    clienthandler.h \
     photodisplay.h \
-    server.h \
-    server.h \
-    photodisplay.h
+    server.h
 
 # Явное указание на необходимость MOC
 moc_output.source = moc

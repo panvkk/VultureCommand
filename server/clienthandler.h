@@ -1,3 +1,4 @@
+// clienthandler.h
 #ifndef CLIENTHANDLER_H
 #define CLIENTHANDLER_H
 
@@ -15,10 +16,11 @@ public slots:
 
 signals:
     void validRequest(const QString& surname);
-    void invalidRequest(const QString& message, const QString& error); // Новый сигнал
+    void invalidRequest(const QString& message, const QString& error);
 
 private:
     void processLine(const QByteArray& lineData);
+    QString analyzeErrorMessage(const QString& message);
 
     QTcpSocket* socket;
     QByteArray buffer;

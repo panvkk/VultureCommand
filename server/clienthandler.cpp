@@ -1,3 +1,4 @@
+// clienthandler.cpp
 #include "clienthandler.h"
 #include <QByteArray>
 #include <QRegularExpression>
@@ -22,26 +23,55 @@ void ClientHandler::readData() {
 void ClientHandler::processLine(const QByteArray& lineData) {
     QString message = QString::fromUtf8(lineData).trimmed();
 
-    QRegularExpression regex("Hello, Garson, I'm ([A-Za-z]+)!");
+    QRegularExpression regex("^Hello, Garson, I'm ([A-Za-z]+)!$");
     QRegularExpressionMatch match = regex.match(message);
 
-    QString response;
     if(match.hasMatch()) {
         QString surname = match.captured(1);
-        response = "I'm not Garson, I'm Server! Go To Sleep To the Garden!\n";
+        QString response = "I'm not Garson, I'm Server! Go To Sleep To the Garden!\n";
         emit validRequest(surname);
 
         socket->write(response.toUtf8());
         socket->flush();
-        socket->disconnectFromHost();
     } else {
-        QString error = "Invalid message format";
-        response = "ERROR: " + error + "! Use: 'Hello, Garson, I'm [Surname]!'\n";
+        QString error = analyzeErrorMessage(message);
+        QString response = "ERROR: " + error + "\n";
 
-        // Отправляем сигнал об ошибке
         emit invalidRequest(message, error);
-
         socket->write(response.toUtf8());
         socket->flush();
     }
+}
+
+QString ClientHandler::analyzeErrorMessage(const QString& message) {
+    QStringList errors;
+
+    if (!message.startsWith("Hello, ")) {
+        errors << "Message must start with 'Hello, '";
+    }
+
+    if (!message.contains("Garson,")) {
+        errors << "Must contain 'Garson,' after 'Hello, '";
+    } else if (message.indexOf("Garson,") != 7) {
+        errors << "Missing space after 'Hello,'";
+    }
+
+    if (!message.contains("I'm ")) {
+        errors << "Must contain 'I'm ' before surname";
+    }
+
+    if (!message.endsWith("!")) {
+        errors << "Message must end with '!'";
+    }
+
+    QRegularExpression nameRegex("I'm ([A-Za-z]+)!");
+    if (!nameRegex.match(message).hasMatch()) {
+        errors << "Surname must contain only letters after 'I'm '";
+    }
+
+    if (errors.isEmpty()) {
+        errors << "Unknown message format error";
+    }
+
+    return errors.join(". ") + ". Correct format: 'Hello, Garson, I'm [Surname]!'";
 }
