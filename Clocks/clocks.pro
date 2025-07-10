@@ -25,4 +25,5 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 RESOURCES += \
     qrc.qrc
 
-DISTFILES +=
+DISTFILES += \
+    images/minute 24.png

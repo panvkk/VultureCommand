@@ -4,10 +4,17 @@
 #include <QMainWindow>
 #include <QTimer>
 #include <QTime>
-#include <QSoundEffect>
 #include <QPixmap>
-#include <QMessageBox>
-#include <QMediaPlayer>
+#include <QVector>
+#include <QPushButton>
+#include <QFile>
+#include <QTextStream>
+
+struct SessionStats {
+    QTime startTime;
+    QTime endTime;
+    int durationSeconds;
+};
 
 class MainWindow : public QMainWindow
 {
@@ -17,83 +24,37 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
-    void showClock(); // Function to show the clock after splash screen
-
 protected:
-    void paintEvent(QPaintEvent *event) override;
+    void closeEvent(QCloseEvent *event) override;
 
 private slots:
     void updateClock();
-    void playHourChime(int hour);
     void openClock();
     void showStatistics();
     void showHelp();
-
-    // Background themes
-    void setColdTheme();
-    void setPeachGloomTheme();
-    void setBelarusTheme();
-    void setCloudyTheme();
-    void setPeachGrapeTheme();
-    void setSunnyGladeTheme();
-    void setFatePredictionTheme();
-    void setSeasonMixTheme();
-
-    // Hand styles
-    void setClassicHands();
-    void setModernHands();
-    void setFantasyHands();
-
-    // Music
-    void playMusicTrack1();
-    void playMusicTrack2();
-    void playMusicTrack3();
-    void handleMusicStateChanged(QMediaPlayer::PlaybackState state);
-
-    // Time format
-    void setNumericFormat();
-    void setTimerInput();
-    void setManualInput();
-    void setVerbalFormat();
-
     void showNumericTimeDialog();
-    void showTimerInputDialog();
+    void showVerbalTimeDialog();
     void setCustomTime(const QTime &time);
 
 private:
+    QString formatDuration(int seconds);
     void createMenus();
-    void drawClockFace(QPainter &painter);
-    void drawHand(QPainter &painter, double angle, int length, int width, QColor color);
-    void drawCuckoo(QPainter &painter, int secondsVisible);
-    void drawSplashScreen(QPainter &painter);
+    QTime parseVerbalTime(const QString &verbalTime);
+    void saveSessionStats(const SessionStats &stats);
+    QVector<SessionStats> loadAllSessionStats();
 
     QPixmap background;
     QTimer *timer;
-    int lastSecond;
-    bool isTick;
     bool showSplash;
-
-    // Sound effects
-    QSoundEffect tickSound;
-    QSoundEffect tockSound;
-    QSoundEffect boomSound;
-    QSoundEffect cuckooSound;
-    QMediaPlayer *backgroundMusic;
-
-    QMediaPlayer *musicPlayer;
-    QAudioOutput *audioOutput;
-    QString currentTrack;
-
-    int lastChimedHour;
-    bool cuckooPlayed;
-    bool hourChimePlayed;
-
-    // Current style settings
-    QString currentHandStyle;
-    QString currentTimeFormat;
-
+    QPushButton *openButton;
+    QWidget *splashWidget;
+    QVector<QPixmap> hourHands;
+    QVector<QPixmap> minuteHands;
     QTime customTime;
-    QTime timeOffset;
     bool useCustomTime = false;
+    QTime sessionStartTime;
+    void paintEvent(QPaintEvent *event);
+    const QString STATS_FILE_NAME = "app_stats.txt";
 };
+
 #endif // MAINWINDOW_H

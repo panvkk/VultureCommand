@@ -1,58 +1,113 @@
 #include "mainwindow.h"
 #include <QPainter>
-#include <QDebug>
-#include <cmath>
 #include <QMenuBar>
-#include <QTimeEdit>
 #include <QInputDialog>
 #include <QPushButton>
-#include <QAudioOutput>
-#include <QPainterPath>
 #include <QVBoxLayout>
 #include <QAction>
-#include <QFileDialog>
 #include <QMessageBox>
+#include <QLabel>
+#include <QFont>
+#include <QDebug>
+#include <QCloseEvent>
+#include <QDialog>
+#include <QVBoxLayout>
+#include <QLabel>
+#include <QScrollArea>
+#include <QTextBrowser>
 
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
     showSplash = true;
-    setFixedSize(800, 600);
+    setFixedSize(1024, 825);
 
-    // Set menu bar style
-    menuBar()->setStyleSheet(
-        "QMenuBar { background-color: #f0f0f0; border-bottom: 1px solid #d0d0d0; color:black }"
-        "QMenuBar::item { background: transparent; padding: 5px 10px; }"
-        "QMenuBar::item:selected { background: #d0d0d0; }"
+    splashWidget = new QWidget(this);
+    splashWidget->setGeometry(0, 0, width(), height());
+
+    QVBoxLayout *layout = new QVBoxLayout(splashWidget);
+    layout->setAlignment(Qt::AlignCenter);
+    layout->setSpacing(20);
+
+    QLabel *titleLabel1 = new QLabel("Мягкие часы", splashWidget);
+    QLabel *titleLabel2 = new QLabel("Сальвадора Дали", splashWidget);
+
+    QFont titleFont("Arial", 36, QFont::Bold);
+    titleLabel1->setFont(titleFont);
+    titleLabel2->setFont(titleFont);
+    titleLabel1->setAlignment(Qt::AlignCenter);
+    titleLabel2->setAlignment(Qt::AlignCenter);
+    titleLabel1->setStyleSheet("color: #333;");
+    titleLabel2->setStyleSheet("color: #333;");
+
+    QLabel *imageLabel = new QLabel(splashWidget);
+    QPixmap clockIcon(":/images/dali_background.jpg");
+    if (!clockIcon.isNull()) {
+        clockIcon = clockIcon.scaled(400 * 0.8, 300 * 0.8, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        imageLabel->setPixmap(clockIcon);
+    }
+    imageLabel->setAlignment(Qt::AlignCenter);
+
+    openButton = new QPushButton("Открыть часы", splashWidget);
+    openButton->setFixedSize(200 * 0.8, 50 * 0.8);
+    openButton->setStyleSheet(
+        "QPushButton {"
+        "   background-color: #4a86e8;"
+        "   color: white;"
+        "   border-radius: 10px;"
+        "   font-size: 18px;"
+        "   font-weight: bold;"
+        "}"
+        "QPushButton:hover {"
+        "   background-color: #3a76d8;"
+        "}"
         );
+    connect(openButton, &QPushButton::clicked, this, &MainWindow::openClock);
 
-    currentHandStyle = "classic";
+    QLabel *authorLabel = new QLabel("От Сакович А. Исаев К. Панов К.", splashWidget);
+    QFont authorFont("Arial", 14 * 0.8);
+    authorLabel->setFont(authorFont);
+    authorLabel->setAlignment(Qt::AlignCenter);
+    authorLabel->setStyleSheet("color: #555;");
 
-    // Initialize sounds
-    tickSound.setSource(QUrl("qrc:/sounds/tick.wav"));
-    tockSound.setSource(QUrl("qrc:/sounds/tack.wav"));
-    boomSound.setSource(QUrl("qrc:/sounds/boom.wav"));
-    cuckooSound.setSource(QUrl("qrc:/sounds/cuckoo.wav"));
+    layout->addWidget(titleLabel1);
+    layout->addWidget(titleLabel2);
+    layout->addWidget(imageLabel);
+    layout->addWidget(openButton, 0, Qt::AlignCenter);
+    layout->addWidget(authorLabel);
 
-    backgroundMusic = new QMediaPlayer(this);
+    splashWidget->setLayout(layout);
+    splashWidget->show();
+
+    // Загрузка 12 часовых стрелок
+    for (int i = 1; i <= 12; ++i) {
+        QString hourPath = QString(":/images/hour_%1.png").arg(i);
+        QPixmap hourPix(hourPath);
+        if (!hourPix.isNull()) {
+            hourPix = hourPix.scaled(this->size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        } else {
+            qWarning() << "Failed to load hour image:" << hourPath;
+        }
+        hourHands.append(hourPix);
+    }
+
+    // Загрузка 60 минутных стрелок
+    for (int i = 0; i < 60; ++i) {
+        QString minutePath = QString(":/images/minute %1.png").arg(i);
+        QPixmap minutePix(minutePath);
+        if (!minutePix.isNull()) {
+            minutePix = minutePix.scaled(this->size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        } else {
+            qWarning() << "Failed to load minute image:" << minutePath;
+        }
+        minuteHands.append(minutePix);
+    }
 
     customTime = QTime::currentTime();
 
-    // Initialize timer but don't start it yet
     timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &MainWindow::updateClock);
-
-    lastSecond = QTime::currentTime().second();
-    isTick = true;
-    lastChimedHour = -1;
-    cuckooPlayed = false;
-    hourChimePlayed = false;
-
-    currentHandStyle = "classic";
-    currentTimeFormat = "numeric";
-
-    createMenus();
 }
 
 MainWindow::~MainWindow()
@@ -61,68 +116,20 @@ MainWindow::~MainWindow()
 
 void MainWindow::createMenus()
 {
-    // File menu
     QMenu *fileMenu = menuBar()->addMenu(tr("Файл"));
-    QAction *openAction = fileMenu->addAction(tr("Открыть часы"));
-    connect(openAction, &QAction::triggered, this, &MainWindow::openClock);
+    QAction *exitAction = fileMenu->addAction(tr("Выход"));
+    connect(exitAction, &QAction::triggered, this, &QMainWindow::close);
 
-    // Main menu with submenus
-    QMenu *mainMenu = menuBar()->addMenu(tr("Главная"));
-
-    // Design submenu
-    QMenu *designMenu = mainMenu->addMenu(tr("Дизайн"));
-
-    // Background themes
-    QMenu *bgMenu = designMenu->addMenu(tr("Фон"));
-    bgMenu->addAction(tr("1. Микс 4 сезона"), this, &MainWindow::setSeasonMixTheme);
-    bgMenu->addAction(tr("2. Холодный"), this, &MainWindow::setColdTheme);
-    bgMenu->addAction(tr("3. Хмурый персиковый"), this, &MainWindow::setPeachGloomTheme);
-    bgMenu->addAction(tr("4. Беларусь"), this, &MainWindow::setBelarusTheme);
-    bgMenu->addAction(tr("5. Заоблачный"), this, &MainWindow::setCloudyTheme);
-    bgMenu->addAction(tr("6. Персиковый виноград"), this, &MainWindow::setPeachGrapeTheme);
-    bgMenu->addAction(tr("7. Солнечная поляна"), this, &MainWindow::setSunnyGladeTheme);
-    bgMenu->addAction(tr("8. Предсказание судьбы"), this, &MainWindow::setFatePredictionTheme);
-
-    // Hand styles
-    QMenu *handMenu = designMenu->addMenu(tr("Стиль стрелок"));
-    handMenu->addAction(tr("Классические"), this, &MainWindow::setClassicHands);
-    handMenu->addAction(tr("Современные"), this, &MainWindow::setModernHands);
-    handMenu->addAction(tr("Фэнтези"), this, &MainWindow::setFantasyHands);
-
-    // Music submenu
-    // Инициализация аудио
-    musicPlayer = new QMediaPlayer(this);
-    audioOutput = new QAudioOutput(this);
-    musicPlayer->setAudioOutput(audioOutput);
-    audioOutput->setVolume(0.5); // 50% громкости по умолчанию
-
-    connect(musicPlayer, &QMediaPlayer::playbackStateChanged, this, &MainWindow::handleMusicStateChanged);
-
-    QMenu *musicMenu = mainMenu->addMenu(tr("Музыка"));
-    musicMenu->addAction(tr("Птицы"), this, &MainWindow::playMusicTrack1);
-    musicMenu->addAction(tr("Напряжение"), this, &MainWindow::playMusicTrack2);
-    musicMenu->addAction(tr("Триумф"), this, &MainWindow::playMusicTrack3);
-
-    // Statistics menu
     QMenu *statsMenu = menuBar()->addMenu(tr("Статистика"));
     QAction *showStatsAction = statsMenu->addAction(tr("Показать статистику"));
     connect(showStatsAction, &QAction::triggered, this, &MainWindow::showStatistics);
 
-    // Format menu
     QMenu *formatMenu = menuBar()->addMenu(tr("Формат"));
-
-    // Числовой формат
-    QMenu *numericMenu = formatMenu->addMenu(tr("Числовой"));
-    QAction *manualInputAction = numericMenu->addAction(tr("Вручную"));
+    QAction *manualInputAction = formatMenu->addAction(tr("Установить время классически"));
     connect(manualInputAction, &QAction::triggered, this, &MainWindow::showNumericTimeDialog);
+    QAction *verbalInputAction = formatMenu->addAction(tr("Установить время словесно"));
+    connect(verbalInputAction, &QAction::triggered, this, &MainWindow::showVerbalTimeDialog);
 
-    QAction *timerInputAction = numericMenu->addAction(tr("Из таймера"));
-    connect(timerInputAction, &QAction::triggered, this, &MainWindow::showTimerInputDialog);
-
-    // Verbal format
-    formatMenu->addAction(tr("Словесный"), this, &MainWindow::setVerbalFormat);
-
-    // Help menu
     QMenu *helpMenu = menuBar()->addMenu(tr("Помощь"));
     QAction *helpAction = helpMenu->addAction(tr("О программе"));
     connect(helpAction, &QAction::triggered, this, &MainWindow::showHelp);
@@ -146,516 +153,423 @@ void MainWindow::showNumericTimeDialog()
     }
 }
 
-void MainWindow::showTimerInputDialog()
+void MainWindow::showVerbalTimeDialog()
 {
-    QDialog dialog(this);
-    dialog.setWindowTitle(tr("Установка времени из таймера"));
-
-    QTimeEdit *timeEdit = new QTimeEdit(&dialog);
-    timeEdit->setDisplayFormat("HH:mm:ss");
-    timeEdit->setTime(customTime);
-
-    QPushButton *okButton = new QPushButton(tr("OK"), &dialog);
-    QPushButton *cancelButton = new QPushButton(tr("Отмена"), &dialog);
-
-    connect(okButton, &QPushButton::clicked, &dialog, &QDialog::accept);
-    connect(cancelButton, &QPushButton::clicked, &dialog, &QDialog::reject);
-
-    QVBoxLayout *layout = new QVBoxLayout(&dialog);
-    layout->addWidget(timeEdit);
-    QHBoxLayout *buttonLayout = new QHBoxLayout();
-    buttonLayout->addWidget(okButton);
-    buttonLayout->addWidget(cancelButton);
-    layout->addLayout(buttonLayout);
-
-    if (dialog.exec() == QDialog::Accepted) {
-        setCustomTime(timeEdit->time());
+    bool ok;
+    QString text = QInputDialog::getText(this, tr("Установка времени голосом"),
+                                         tr("Введите время словами (например, \"три часа пятнадцать минут\"):"),
+                                         QLineEdit::Normal,
+                                         "",
+                                         &ok);
+    if (ok && !text.isEmpty()) {
+        QTime time = parseVerbalTime(text);
+        if (time.isValid()) {
+            setCustomTime(time);
+        } else {
+            QMessageBox::warning(this, tr("Ошибка"), tr("Не удалось распознать время. Пожалуйста, попробуйте еще раз."));
+        }
     }
+}
+
+QTime MainWindow::parseVerbalTime(const QString &verbalTime)
+{
+    QString lowerText = verbalTime.toLower();
+    int hours = -1;
+    int minutes = -1;
+    int seconds = 0;
+
+    QMap<QString, int> numWords = {
+        {"ноль", 0}, {"один", 1}, {"одна", 1}, {"два", 2}, {"две", 2}, {"три", 3}, {"четыре", 4},
+        {"пять", 5}, {"шесть", 6}, {"семь", 7}, {"восемь", 8}, {"девять", 9}, {"десять", 10},
+        {"одиннадцать", 11}, {"двенадцать", 12}, {"тринадцать", 13}, {"четырнадцать", 14},
+        {"пятнадцать", 15}, {"шестнадцать", 16}, {"семнадцать", 17}, {"восемнадцать", 18},
+        {"девятнадцать", 19}, {"двадцать", 20}, {"тридцать", 30}, {"сорок", 40}, {"пятьдесят", 50}
+    };
+    QMap<QString, int> tensWords = {
+        {"двадцать", 20}, {"тридцать", 30}, {"сорок", 40}, {"пятьдесят", 50}
+    };
+
+    QStringList words = lowerText.split(' ', Qt::SkipEmptyParts);
+
+    // Определение часов
+    for (int i = 0; i < words.size(); ++i) {
+        if (words[i].contains("час") || words[i].contains("часов") || words[i].contains("часа")) {
+            if (i > 0 && numWords.contains(words[i-1])) {
+                hours = numWords[words[i-1]];
+                if (hours == 12 && lowerText.contains("ночи")) hours = 0;
+                if (hours == 12 && lowerText.contains("дня")) hours = 12;
+                else if (hours < 12 && (lowerText.contains("пополудни") || lowerText.contains("вечера") || lowerText.contains("дня"))) {
+                    hours += 12;
+                }
+            }
+            break;
+        }
+    }
+
+    bool inMinutesSection = false;
+    bool inSecondsSection = false;
+
+    // Определение минут и секунд
+    for (int i = 0; i < words.size(); ++i) {
+        if (words[i].contains("минут") || words[i].contains("минута") || words[i].contains("минуты")) {
+            inMinutesSection = true;
+            inSecondsSection = false;
+
+            // Обработка составных числительных (десятки + единицы)
+            if (i >= 2 && tensWords.contains(words[i-2]) && numWords.contains(words[i-1])) {
+                minutes = tensWords[words[i-2]] + numWords[words[i-1]];
+            }
+            // Обработка простых числительных (десятки или единицы)
+            else if (i >= 1 && numWords.contains(words[i-1])) {
+                minutes = numWords[words[i-1]];
+            }
+        }
+        else if (words[i].contains("секунд") || words[i].contains("секунда") || words[i].contains("секунды")) {
+            inSecondsSection = true;
+            inMinutesSection = false;
+
+            // Аналогичная обработка для секунд
+            if (i >= 2 && tensWords.contains(words[i-2]) && numWords.contains(words[i-1])) {
+                seconds = tensWords[words[i-2]] + numWords[words[i-1]];
+            }
+            else if (i >= 1 && numWords.contains(words[i-1])) {
+                seconds = numWords[words[i-1]];
+            }
+        }
+        // Дополнительная обработка для минут
+        else if (inMinutesSection && minutes == -1) {
+            if (numWords.contains(words[i])) {
+                minutes = numWords[words[i]];
+            } else if (i < words.size() - 1 && tensWords.contains(words[i]) && numWords.contains(words[i+1])) {
+                minutes = tensWords[words[i]] + numWords[words[i+1]];
+                i++;
+            }
+        }
+        // Дополнительная обработка для секунд
+        else if (inSecondsSection && seconds == 0) {
+            if (numWords.contains(words[i])) {
+                seconds = numWords[words[i]];
+            } else if (i < words.size() - 1 && tensWords.contains(words[i]) && numWords.contains(words[i+1])) {
+                seconds = tensWords[words[i]] + numWords[words[i+1]];
+                i++;
+            }
+        }
+    }
+
+    // Резервный поиск часов
+    if (hours == -1 && minutes != -1) {
+        int minutesIndex = lowerText.indexOf("минут");
+        if (minutesIndex == -1) minutesIndex = lowerText.indexOf("минута");
+        if (minutesIndex == -1) minutesIndex = lowerText.indexOf("минуты");
+
+        if (minutesIndex != -1) {
+            QString subString = lowerText.left(minutesIndex).trimmed();
+            QStringList subWords = subString.split(' ', Qt::SkipEmptyParts);
+            if (!subWords.isEmpty()) {
+                QString lastWord = subWords.last();
+                if (numWords.contains(lastWord)) {
+                    hours = numWords[lastWord];
+                    if (hours < 12 && (lowerText.contains("пополудни") || lowerText.contains("вечера") || lowerText.contains("дня"))) {
+                        hours += 12;
+                    }
+                }
+            }
+        }
+    }
+
+    // Обработка специальных случаев
+    if (lowerText.contains("полдень")) {
+        hours = 12; minutes = 0; seconds = 0;
+    } else if (lowerText.contains("полночь")) {
+        hours = 0; minutes = 0; seconds = 0;
+    }
+
+    // Проверка валидности результата
+    if (hours == -1 || minutes == -1) {
+        return QTime();
+    }
+
+    // Коррекция часов (если указано 12 в 24-часовом формате)
+    if (hours == 12 && !lowerText.contains("дня") && !lowerText.contains("пополудни")) {
+        hours = 0;
+    }
+
+    return QTime(hours, minutes, seconds);
 }
 
 void MainWindow::setCustomTime(const QTime &time)
 {
     customTime = time;
     useCustomTime = true;
-    update(); // Перерисовываем часы
-}
-
-void MainWindow::drawSplashScreen(QPainter &painter)
-{
-    // Заливаем фон
-    painter.fillRect(rect(), QColor(240, 240, 240));
-
-    // Устанавливаем шрифт для заголовка
-    QFont titleFont("Arial", 36, QFont::Bold);
-    painter.setFont(titleFont);
-    painter.setPen(Qt::black);
-
-    // Рисуем заголовок "Самые лучшие часы" в две строки
-    painter.drawText(QRect(0, 80, width(), 100), Qt::AlignCenter, "Самые лучшие");
-    painter.drawText(QRect(0, 1, width(), 100), Qt::AlignCenter, "Часы");
-
-    // Устанавливаем шрифт для авторов
-    QFont authorFont("Arial", 14);
-    painter.setFont(authorFont);
-
-    // Рисуем текст авторов
-    painter.drawText(QRect(0, height() - 100, width(), 30),
-                     Qt::AlignCenter, "От Сакович А. Исаев К. Панов К.");
-
-    // Рисуем изображение часов справа (пример)
-    QPixmap clockIcon(":/images/dali_background.jpg");
-    if(!clockIcon.isNull()) {
-        int iconSize = qMin(width(), height()) / 3;
-        int xPos = (width() - iconSize) / 2;
-        int yPos = (height() - iconSize) / 2;
-        painter.drawPixmap(xPos, yPos, iconSize, iconSize, clockIcon);
-    }
+    update();
 }
 
 void MainWindow::openClock()
 {
     showSplash = false;
-    timer->start(1000);
+    splashWidget->hide();
 
-    // Load default background
+    // Создаем меню сразу
+    createMenus();
+
+    // Вычисляем размер области часов (без меню)
+    int menuHeight = menuBar()->height();
+    QSize clockSize = QSize(width(), height() - menuHeight);
+
+    // Загрузка фона
     if(!background.load(":/images/dali_background.jpg")) {
-        background = QPixmap(800, 600);
+        background = QPixmap(clockSize);
         background.fill(Qt::black);
+        qWarning() << "Failed to load background image!";
+    } else {
+        background = background.scaled(clockSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
     }
-    background = background.scaled(this->size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
 
+    // Масштабируем стрелки под новый размер
+    for (int i = 0; i < hourHands.size(); ++i) {
+        if (!hourHands[i].isNull()) {
+            hourHands[i] = hourHands[i].scaled(clockSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        }
+    }
+    for (int i = 0; i < minuteHands.size(); ++i) {
+        if (!minuteHands[i].isNull()) {
+            minuteHands[i] = minuteHands[i].scaled(clockSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        }
+    }
+
+    sessionStartTime = QTime::currentTime();
+    timer->start(1000);
     update();
 }
 
+QString MainWindow::formatDuration(int seconds)
+{
+    if (seconds > 120) {
+        int m = seconds / 60;
+        int s = seconds % 60;
+        return tr("%1 мин. %2 сек.").arg(m).arg(s);
+    } else {
+        return tr("%1 сек.").arg(seconds);
+    }
+}
+
+
 void MainWindow::showStatistics()
 {
-    QString stats = tr("Результаты тестирования:\n"
-                       "Время запуска программы: 22:51:48\n"
-                       "Время завершения программы: 22:51:53\n"
-                       "Продолжительность работы: 0 минут 5 секунд\n"
-                       "Максимальное время тестирования: 0 минут 56 секунд\n"
-                       "Минимальное время тестирования: 0 минут 1 секунд\n\n"
-                       "|    | Сохранить результат | Выйти |\n"
-                       "|---|---|---|\n"
-                       "|    | Время запуска    | Время завершения    | Продолжительность |\n"
-                       "| 1   | 16:33:34    | 16:33:39    | 5    |\n"
-                       "| 2   | 16:33:47    | 16:33:48    | 1    |\n"
-                       "| 3   | 16:33:59    | 16:34:05    | 6    |\n"
-                       "| 4   | 16:34:16    | 16:35:06    | 50    |\n"
-                       "| 5   | 16:35:54    | 16:35:55    | 1    |\n"
-                       "| 6   | 16:36:01    | 16:36:57    | 56    |");
+    QVector<SessionStats> allStats = loadAllSessionStats();
 
-    QMessageBox::information(this, tr("Статистика"), stats);
+    // Создаём модальный диалог фиксированного размера
+    QDialog dlg(this);
+    dlg.setWindowTitle(tr("Статистика"));
+    dlg.setModal(true);
+    dlg.setFixedSize(600, 400);
+
+    QVBoxLayout *mainLayout = new QVBoxLayout(&dlg);
+    mainLayout->setContentsMargins(10, 10, 10, 10);
+    mainLayout->setSpacing(10);
+
+    // 1) Блок общих показателей (всегда виден)
+    QWidget *summaryWidget = new QWidget(&dlg);
+    QVBoxLayout *summaryLayout = new QVBoxLayout(summaryWidget);
+    summaryLayout->setSpacing(5);
+
+    if (allStats.isEmpty()) {
+        summaryLayout->addWidget(
+            new QLabel(tr("Данные о предыдущих сессиях отсутствуют."), summaryWidget));
+    }
+    else {
+        int totalSec = 0, minSec = INT_MAX, maxSec = 0;
+        for (auto &s : allStats) {
+            totalSec += s.durationSeconds;
+            minSec = qMin(minSec, s.durationSeconds);
+            maxSec = qMax(maxSec, s.durationSeconds);
+        }
+        int avgSec = qRound(double(totalSec) / allStats.size());
+
+        summaryLayout->addWidget(
+            new QLabel(tr("Всего сеансов: %1")
+                           .arg(allStats.size()), summaryWidget));
+        summaryLayout->addWidget(
+            new QLabel(tr("Общее время работы: %1")
+                           .arg(formatDuration(totalSec)), summaryWidget));
+        summaryLayout->addWidget(
+            new QLabel(tr("Средняя продолжительность: %1")
+                           .arg(formatDuration(avgSec)), summaryWidget));
+        summaryLayout->addWidget(
+            new QLabel(tr("Минимальная / максимальная: %1 / %2")
+                           .arg(formatDuration(minSec))
+                           .arg(formatDuration(maxSec)), summaryWidget));
+
+    }
+
+    mainLayout->addWidget(summaryWidget);
+
+    // 2) Прокручиваемая область со списком сеансов
+    QScrollArea *scroll = new QScrollArea(&dlg);
+    scroll->setWidgetResizable(true);
+
+    QWidget *container = new QWidget;
+    QVBoxLayout *vbox = new QVBoxLayout(container);
+    vbox->setAlignment(Qt::AlignTop);
+    vbox->setSpacing(5);
+
+    if (allStats.isEmpty()) {
+        vbox->addWidget(
+            new QLabel(tr("Нет данных для отображения."), container));
+    }
+    else {
+        for (int i = 0; i < allStats.size(); ++i) {
+            const SessionStats &s = allStats.at(i);
+            int dur = s.durationSeconds;
+
+            // Формируем строку длительности: если > 120 сек, переводим в мин. и сек.
+            QString durStr;
+            if (dur > 120) {
+                int m = dur / 60;
+                int sec = dur % 60;
+                durStr = tr("%1 мин. %2 сек.").arg(m).arg(sec);
+            } else {
+                durStr = tr("%1 сек.").arg(dur);
+            }
+
+            QString line = tr("%1. %2 – %3   Длительность: %4")
+                               .arg(i + 1)
+                               .arg(s.startTime.toString("HH:mm:ss"))
+                               .arg(s.endTime.toString("HH:mm:ss"))
+                               .arg(durStr);
+
+            QLabel *lbl = new QLabel(line, container);
+            lbl->setTextInteractionFlags(Qt::TextSelectableByMouse);
+            vbox->addWidget(lbl);
+        }
+
+    }
+
+    scroll->setWidget(container);
+    mainLayout->addWidget(scroll);
+
+    dlg.exec();
 }
+
+
 
 void MainWindow::showHelp()
 {
-    QString helpText = tr("Описание программы\n\n"
-                          "1. Программа предназначена для создания часов\n"
-                          "   Часы:\n"
-                          "   1. предусмотрен ввод даты и времени в формате словесного описания, например, \"Двадцать шестого июня две тысячи двадцать четвертого года Двенадцать часов шестнадцать минут сорок пять секунд\", с последующим выводом стандартного формата даты и времени (26.06.2024 12:16:45).\n\n"
-                          "2. Возможность взятия даты и времени из таймера для автоматического ввода.\n\n"
-                          "3. Интерфейс для рисования, дополненный возможностью ввода даты и времени для сохранения в файл статистики.\n\n"
-                          "Программа предусматривает проверку правильности ввода даты и времени. В случае неверного формата данные сохраняются в файле статистики.");
+    QString helpText = tr("Программа 'Мягкие часы Дали'\n\n"
+                          "Эта программа отображает знаменитые часы Сальвадора Дали "
+                          "из картины 'Постоянство памяти' (1931).\n\n"
+                          "Особенности реализации:\n"
+                          "- Точное воспроизведение оригинальных стрелок Дали\n"
+                          "- Используются готовые изображения для каждой позиции стрелок\n"
+                          "- Реалистичная текстура фона картины\n\n"
+                          "Для установки времени используйте меню 'Формат' -> 'Установить время классически/словесно'.\n"
+                          "Для просмотра статистики используйте меню 'Статистика' -> 'Показать статистику'.");
 
     QMessageBox::information(this, tr("Помощь"), helpText);
 }
 
-// Implement all the theme setting functions
-void MainWindow::setSeasonMixTheme() {
-    if(!background.load(":/images/season_mix.jpg")) {
-        background = QPixmap(800, 600);
-        background.fill(Qt::black);
-    }
-    background = background.scaled(this->size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-}
-void MainWindow::setColdTheme() {
-    if(!background.load(":/images/cold.jpg")) {
-        background = QPixmap(800, 600);
-        background.fill(Qt::black);
-    }
-    background = background.scaled(this->size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-}
-void MainWindow::setPeachGloomTheme() {
-    if(!background.load(":/images/peach_gloom.jpg")) {
-        background = QPixmap(800, 600);
-        background.fill(Qt::black);
-    }
-    background = background.scaled(this->size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-}
-void MainWindow::setBelarusTheme() {
-    if(!background.load(":/images/belarus.jpg")) {
-        background = QPixmap(800, 600);
-        background.fill(Qt::black);
-    }
-    background = background.scaled(this->size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-}
-void MainWindow::setCloudyTheme() {
-    if(!background.load(":/images/cloudy.jpg")) {
-        background = QPixmap(800, 600);
-        background.fill(Qt::black);
-    }
-    background = background.scaled(this->size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-}
-void MainWindow::setPeachGrapeTheme() {
-    if(!background.load(":/images/peach_grape.jpg")) {
-        background = QPixmap(800, 600);
-        background.fill(Qt::black);
-    }
-    background = background.scaled(this->size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-}
-void MainWindow::setSunnyGladeTheme() {
-    if(!background.load(":/images/sunny_glade.jpg")) {
-        background = QPixmap(800, 600);
-        background.fill(Qt::black);
-    }
-    background = background.scaled(this->size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-}
-void MainWindow::setFatePredictionTheme() {
-    if(!background.load(":/images/fate_prediction.jpg")) {
-        background = QPixmap(800, 600);
-        background.fill(Qt::black);
-    }
-    background = background.scaled(this->size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-}
-
-void MainWindow::setClassicHands()
-{
-    currentHandStyle = "classic";
-    update();
-    QMessageBox::information(this, tr("Стиль стрелок"), tr("Установлен классический стиль стрелок"));
-}
-
-void MainWindow::setModernHands()
-{
-    currentHandStyle = "modern";
-    update();
-    QMessageBox::information(this, tr("Стиль стрелок"), tr("Установлен современный стиль стрелок"));
-}
-
-void MainWindow::setFantasyHands()
-{
-    currentHandStyle = "fantasy";
-    update();
-    QMessageBox::information(this, tr("Стиль стрелок"), tr("Установлен фэнтезийный стиль стрелок"));
-}
-
-void MainWindow::playMusicTrack1()
-{
-    currentTrack = "qrc:/sounds/birds.wav";
-    musicPlayer->setSource(QUrl(currentTrack));
-    musicPlayer->play();
-}
-
-void MainWindow::playMusicTrack2()
-{
-    currentTrack = "qrc:/sounds/tension.wav";
-    musicPlayer->setSource(QUrl(currentTrack));
-    musicPlayer->play();
-}
-
-void MainWindow::playMusicTrack3()
-{
-    currentTrack = "qrc:/sounds/triumph.wav";
-    musicPlayer->setSource(QUrl(currentTrack));
-    musicPlayer->play();
-}
-
-void MainWindow::handleMusicStateChanged(QMediaPlayer::PlaybackState state)
-{
-    if (state == QMediaPlayer::StoppedState && !currentTrack.isEmpty()) {
-        // Если трек закончился - воспроизводим его снова
-        musicPlayer->setSource(QUrl(currentTrack));
-        musicPlayer->play();
-    }
-}
-
-void MainWindow::setNumericFormat() { currentTimeFormat = "numeric"; update(); }
-void MainWindow::setTimerInput() { currentTimeFormat = "timer"; update(); }
-void MainWindow::setManualInput() { currentTimeFormat = "manual"; update(); }
-void MainWindow::setVerbalFormat() { currentTimeFormat = "verbal"; update(); }
-
 void MainWindow::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event);
-    QPainter painter(this);
 
-    if(showSplash) {
-        drawSplashScreen(painter);
+    if (showSplash) {
         return;
     }
 
-    int bgX = (width() - background.width()) / 2;
-    int bgY = (height() - background.height()) / 2;
-    painter.drawPixmap(bgX, bgY, background);
+    QPainter painter(this);
+    int menuHeight = menuBar()->height();
 
-    QTime time = QTime::currentTime();
-    if ((time.hour() == 12 || time.hour() == 0) &&
-        time.minute() == 0 &&
-        time.second() < 30 &&
-        cuckooPlayed) {
-        drawCuckoo(painter, time.second());
+    // Рисуем фон часов под меню
+    painter.drawPixmap(0, menuHeight, background);
+
+    // Рисуем стрелки
+    int hour = customTime.hour();
+    int minute = customTime.minute();
+
+    // Выбор часового изображения
+    int hourImageIndex = hour % 12;
+
+    // Выбор минутного изображения
+    int minuteImageIndex = minute;
+
+    // Отрисовка часовой стрелки
+    if (hourImageIndex < hourHands.size() && !hourHands[hourImageIndex].isNull()) {
+        painter.drawPixmap(0, menuHeight, hourHands[hourImageIndex]);
+    } else {
+        qWarning() << "Hour hand image missing for index" << hourImageIndex;
     }
-    drawClockFace(painter);
 
-    // Используем customTime вместо QTime::currentTime()
-    drawClockFace(painter);
-    drawHand(painter, customTime.hour() * 30 + customTime.minute() * 0.5, 50, 6, Qt::black);
-    drawHand(painter, customTime.minute() * 6, 70, 4, Qt::blue);
-    drawHand(painter, customTime.second() * 6, 80, 2, Qt::red);
-
-    if ((time.hour() == 12 || time.hour() == 0) &&
-        time.minute() == 0 && time.second() < 30) {
-        drawCuckoo(painter, time.second());
+    // Отрисовка минутной стрелки
+    if (minuteImageIndex < minuteHands.size() && !minuteHands[minuteImageIndex].isNull()) {
+        painter.drawPixmap(0, menuHeight, minuteHands[minuteImageIndex]);
+    } else {
+        qWarning() << "Minute hand image missing for index" << minuteImageIndex;
     }
 }
 
 void MainWindow::updateClock()
 {
-    QTime currentRealTime = QTime::currentTime();
-
-    // Инициализация при первом запуске
-    static bool firstUpdate = true;
-    if (firstUpdate) {
-        lastSecond = currentRealTime.second();
-        isTick = true;
-        firstUpdate = false;
-    }
-
     if (!useCustomTime) {
-        customTime = currentRealTime;
+        customTime = QTime::currentTime();
     }
-
-    // Тик-так каждую секунду
-    int currentSecond = currentRealTime.second();
-    if (currentSecond != lastSecond) {
-        if (isTick) tickSound.play();
-        else tockSound.play();
-        isTick = !isTick;
-        lastSecond = currentSecond;
-    }
-
-    // Остальная логика обновления часов
-    int currentHour = currentRealTime.hour();
-    int currentMinute = currentRealTime.minute();
-
-    // Сбрасываем флаги в начале нового часа
-    if (currentMinute == 0 && currentSecond == 0) {
-        if (currentHour != lastChimedHour) {
-            cuckooPlayed = false;
-            hourChimePlayed = false;
-            lastChimedHour = currentHour;
-        }
-    }
-
-    // Проигрываем кукушку или бой часов
-    if (currentMinute == 0 && currentSecond == 0) {
-        if (!hourChimePlayed && !cuckooPlayed) {
-            playHourChime(currentHour);
-            if (currentHour == 12 || currentHour == 0) {
-                cuckooPlayed = true;
-            } else {
-                hourChimePlayed = true;
-            }
-        }
-    }
-
     update();
 }
 
-void MainWindow::playHourChime(int hour)
+void MainWindow::saveSessionStats(const SessionStats &stats)
 {
-    // В полдень и полночь играем песню кукушки
-    if (hour == 12 || hour == 0) {
-        if (!cuckooPlayed) {
-            // Кукушка 12 раз с интервалом 0.5 секунды
-            for (int i = 0; i < 12; ++i) {
-                QTimer::singleShot(i * 500, [this]() {
-                    cuckooSound.play();
-                });
+    QFile file(STATS_FILE_NAME);
+    if (file.open(QIODevice::Append | QIODevice::Text)) {
+        QTextStream out(&file);
+        out << stats.startTime.toString("HH:mm:ss") << ","
+            << stats.endTime.toString("HH:mm:ss") << ","
+            << stats.durationSeconds << "\n";
+        file.close();
+    } else {
+        qWarning() << "Failed to open stats file for writing:" << STATS_FILE_NAME;
+    }
+}
+
+QVector<SessionStats> MainWindow::loadAllSessionStats()
+{
+    QVector<SessionStats> allStats;
+    QFile file(STATS_FILE_NAME);
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QTextStream in(&file);
+        while (!in.atEnd()) {
+            QString line = in.readLine();
+            QStringList parts = line.split(',');
+            if (parts.size() == 3) {
+                SessionStats stats;
+                stats.startTime = QTime::fromString(parts.at(0), "HH:mm:ss");
+                stats.endTime = QTime::fromString(parts.at(1), "HH:mm:ss");
+                stats.durationSeconds = parts.at(2).toInt();
+                if (stats.startTime.isValid() && stats.endTime.isValid()) {
+                    allStats.append(stats);
+                }
             }
-            cuckooPlayed = true;
         }
+        file.close();
+    } else {
+        qWarning() << "Failed to open stats file for reading (or file does not exist):" << STATS_FILE_NAME;
     }
-    // В остальные часы - бой часов
-    else {
-        if (!hourChimePlayed) {
-            int strikes = hour > 12 ? hour - 12 : hour;
-            for (int i = 0; i < strikes; ++i) {
-                QTimer::singleShot(i * 1000, [this]() {
-                    boomSound.play();
-                });
-            }
-            hourChimePlayed = true;
-        }
-    }
+    return allStats;
 }
 
-void MainWindow::drawClockFace(QPainter &painter)
+void MainWindow::closeEvent(QCloseEvent *event)
 {
-    painter.save();
-    painter.setRenderHint(QPainter::Antialiasing);
-
-    int centerX = width() / 2;
-    int centerY = height() / 2;
-    int radius = qMin(width(), height()) / 3;
-
-    painter.setPen(QPen(Qt::black, 2));
-    painter.setBrush(Qt::white);
-    painter.drawEllipse(QPoint(centerX, centerY), radius, radius);
-
-    painter.setPen(Qt::black);
-    QFont font = painter.font();
-    font.setPointSize(12);
-    painter.setFont(font);
-
-    for (int i = 1; i <= 12; ++i) {
-        double angle = (i * 30) * M_PI / 180;
-        int x = centerX + (radius - 20) * sin(angle);
-        int y = centerY - (radius - 20) * cos(angle);
-        painter.drawText(x - 10, y - 10, 20, 20, Qt::AlignCenter, QString::number(i));
-    }
-
-    painter.restore();
-}
-
-void MainWindow::drawHand(QPainter &painter, double angle, int length, int width, QColor color)
-{
-    painter.save();
-    painter.setRenderHint(QPainter::Antialiasing);
-
-    int centerX = this->width() / 2;
-    int centerY = this->height() / 2;
-    angle = (angle - 90) * M_PI / 180; // Конвертируем в радианы и смещаем на 90°
-
-    if (currentHandStyle == "classic") {
-        // Улучшенные классические стрелки
-        QLinearGradient gradient(centerX, centerY,
-                                centerX + length*cos(angle),
-                                centerY + length*sin(angle));
-        gradient.setColorAt(0, color.darker(120));
-        gradient.setColorAt(1, color.lighter(120));
-
-        painter.setPen(QPen(QBrush(gradient), width));
-        painter.setBrush(Qt::NoBrush);
-
-        QPointF endPoint(centerX + length*cos(angle),
-                        centerY + length*sin(angle));
-        painter.drawLine(QPointF(centerX, centerY), endPoint);
-
-        // Декоративный круг в основании
-        painter.setBrush(gradient);
-        painter.drawEllipse(QPointF(centerX, centerY), width*1.5, width*1.5);
-    }
-    else if (currentHandStyle == "modern") {
-        // Стильные современные стрелки с градиентом и тенью
-        QPainterPath path;
-        QPointF tip(centerX + length*cos(angle), centerY + length*sin(angle));
-
-        // Создаем форму стрелки
-        path.moveTo(tip);
-        path.lineTo(centerX + width*2*cos(angle + M_PI/2),
-                   centerY + width*2*sin(angle + M_PI/2));
-        path.lineTo(centerX + width*0.3*cos(angle + M_PI),
-                   centerY + width*0.3*sin(angle + M_PI));
-        path.lineTo(centerX + width*2*cos(angle - M_PI/2),
-                   centerY + width*2*sin(angle - M_PI/2));
-        path.closeSubpath();
-
-        // Градиентная заливка
-        QLinearGradient gradient(centerX, centerY, tip.x(), tip.y());
-        gradient.setColorAt(0, color.darker(150));
-        gradient.setColorAt(0.7, color);
-        gradient.setColorAt(1, color.lighter(150));
-
-        // Тень
-        painter.setPen(QPen(QColor(0, 0, 0, 50), 1));
-        painter.setBrush(QColor(0, 0, 0, 30));
-        painter.drawPath(path.translated(2, 2));
-
-        // Основная стрелка
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(gradient);
-        painter.drawPath(path);
-    }
-    else if (currentHandStyle == "fantasy") {
-        // Фэнтезийные стрелки с орнаментом
-        QPainterPath path;
-        QPointF tip(centerX + length*cos(angle), centerY + length*sin(angle));
-
-        // Основная линия с волнообразными краями
-        for (float t = 0; t <= 1.0; t += 0.05) {
-            float currentLength = t * length;
-            float waveWidth = width * (1 + 0.3*sin(t * M_PI * 5));
-
-            QPointF point(
-                centerX + currentLength*cos(angle) + waveWidth*cos(angle + M_PI/2),
-                centerY + currentLength*sin(angle) + waveWidth*sin(angle + M_PI/2)
-            );
-
-            if (t == 0) path.moveTo(point);
-            else path.lineTo(point);
+    if (!showSplash) {
+        QTime sessionEndTime = QTime::currentTime();
+        int duration = sessionStartTime.secsTo(sessionEndTime);
+        if (duration < 0) {
+            duration += 24 * 3600;
         }
 
-        for (float t = 1.0; t >= 0; t -= 0.05) {
-            float currentLength = t * length;
-            float waveWidth = width * (1 + 0.3*sin(t * M_PI * 5));
+        SessionStats currentSession;
+        currentSession.startTime = sessionStartTime;
+        currentSession.endTime = sessionEndTime;
+        currentSession.durationSeconds = duration;
 
-            QPointF point(
-                centerX + currentLength*cos(angle) - waveWidth*cos(angle + M_PI/2),
-                centerY + currentLength*sin(angle) - waveWidth*sin(angle + M_PI/2)
-            );
-
-            path.lineTo(point);
-        }
-
-        path.closeSubpath();
-
-        // Декоративные элементы
-        QPainterPath decorPath;
-        for (int i = 1; i <= 3; i++) {
-            float r = length * 0.2 * i;
-            decorPath.addEllipse(QPointF(centerX + r * cos(angle + M_PI / 2), centerY + r * sin(angle + M_PI / 2)), width * 0.3, width * 0.3);
-            decorPath.addEllipse(QPointF(centerX + r * cos(angle + M_PI / 2), centerY + r * sin(angle + M_PI / 2)), width * 0.3, width * 0.3);
-        }
-
-        // Рисуем с градиентом
-        QRadialGradient gradient(centerX, centerY, length*1.2);
-        gradient.setColorAt(0, QColor(200, 160, 0));
-        gradient.setColorAt(1, QColor(150, 50, 0));
-
-        painter.setPen(QPen(Qt::black, 1));
-        painter.setBrush(gradient);
-        painter.drawPath(path);
-        painter.setBrush(Qt::white);
-        painter.drawPath(decorPath);
+        saveSessionStats(currentSession);
     }
-
-    painter.restore();
-}
-
-void MainWindow::drawCuckoo(QPainter &painter, int secondsVisible)
-{
-    painter.save();
-
-    int centerX = width() / 2;
-    int centerY = height() / 2;
-    int radius = qMin(width(), height()) / 3;
-    int cuckooX = centerX + radius + 10 - qMin(secondsVisible * 5, 50);
-    int cuckooY = centerY - 20;
-
-    // Дверца
-    painter.setPen(QPen(Qt::darkGreen, 2));
-    painter.setBrush(Qt::lightGray);
-    painter.drawRect(centerX + radius + 5, cuckooY - 30, 60, 40);
-
-    // Кукушка
-    painter.setPen(Qt::black);
-    painter.setBrush(Qt::white);
-    painter.drawEllipse(cuckooX, cuckooY, 40, 30);
-    painter.drawEllipse(cuckooX + 25, cuckooY - 10, 15, 15);
-    painter.drawEllipse(cuckooX + 32, cuckooY - 8, 5, 5);
-    painter.drawLine(cuckooX + 30, cuckooY + 5, cuckooX + 20, cuckooY + 15);
-
-    painter.restore();
+    QMainWindow::closeEvent(event);
 }

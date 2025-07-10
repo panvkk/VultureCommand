@@ -1,6 +1,5 @@
 <RCC>
     <qresource prefix="/">
-        <file>images/dali_background.jpg</file>
         <file>sounds/boom.wav</file>
         <file>sounds/cuckoo.wav</file>
         <file>sounds/tack.wav</file>
@@ -16,5 +15,78 @@
         <file>sounds/birds.wav</file>
         <file>sounds/tension.wav</file>
         <file>sounds/triumph.wav</file>
+        <file>images/hour_1.png</file>
+        <file>images/hour_2.png</file>
+        <file>images/hour_3.png</file>
+        <file>images/hour_4.png</file>
+        <file>images/hour_5.png</file>
+        <file>images/hour_6.png</file>
+        <file>images/hour_7.png</file>
+        <file>images/hour_8.png</file>
+        <file>images/hour_9.png</file>
+        <file>images/hour_10.png</file>
+        <file>images/hour_11.png</file>
+        <file>images/hour_12.png</file>
+        <file>images/dali_background.jpg</file>
+        <file>images/minute 0.png</file>
+        <file>images/minute 1.png</file>
+        <file>images/minute 2.png</file>
+        <file>images/minute 3.png</file>
+        <file>images/minute 4.png</file>
+        <file>images/minute 5.png</file>
+        <file>images/minute 6.png</file>
+        <file>images/minute 7.png</file>
+        <file>images/minute 8.png</file>
+        <file>images/minute 9.png</file>
+        <file>images/minute 11.png</file>
+        <file>images/minute 12.png</file>
+        <file>images/minute 13.png</file>
+        <file>images/minute 14.png</file>
+        <file>images/minute 15.png</file>
+        <file>images/minute 16.png</file>
+        <file>images/minute 17.png</file>
+        <file>images/minute 18.png</file>
+        <file>images/minute 19.png</file>
+        <file>images/minute 20.png</file>
+        <file>images/minute 21.png</file>
+        <file>images/minute 22.png</file>
+        <file>images/minute 23.png</file>
+        <file>images/minute 25.png</file>
+        <file>images/minute 26.png</file>
+        <file>images/minute 27.png</file>
+        <file>images/minute 28.png</file>
+        <file>images/minute 29.png</file>
+        <file>images/minute 30.png</file>
+        <file>images/minute 31.png</file>
+        <file>images/minute 32.png</file>
+        <file>images/minute 33.png</file>
+        <file>images/minute 34.png</file>
+        <file>images/minute 35.png</file>
+        <file>images/minute 36.png</file>
+        <file>images/minute 37.png</file>
+        <file>images/minute 38.png</file>
+        <file>images/minute 39.png</file>
+        <file>images/minute 40.png</file>
+        <file>images/minute 41.png</file>
+        <file>images/minute 42.png</file>
+        <file>images/minute 43.png</file>
+        <file>images/minute 44.png</file>
+        <file>images/minute 45.png</file>
+        <file>images/minute 46.png</file>
+        <file>images/minute 47.png</file>
+        <file>images/minute 48.png</file>
+        <file>images/minute 49.png</file>
+        <file>images/minute 50.png</file>
+        <file>images/minute 51.png</file>
+        <file>images/minute 52.png</file>
+        <file>images/minute 53.png</file>
+        <file>images/minute 54.png</file>
+        <file>images/minute 55.png</file>
+        <file>images/minute 56.png</file>
+        <file>images/minute 57.png</file>
+        <file>images/minute 58.png</file>
+        <file>images/minute 59.png</file>
+        <file>images/minute 10.png</file>
+        <file>images/minute 24.png</file>
     </qresource>
 </RCC>
