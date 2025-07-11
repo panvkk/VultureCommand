@@ -33,8 +33,7 @@ ConnectWindow::ConnectWindow(QWidget *parent)
     layout->addWidget(m_connectButton);
     layout->addWidget(m_statusLabel);
     setLayout(layout);
-    setWindowTitle("ClientIKM");
-
+    setWindowTitle("VultureCommandIKM");
     connect(m_connectButton, &QPushButton::clicked, this, &ConnectWindow::onConnectClicked);
     connect(m_socket, &QTcpSocket::connected, this, &ConnectWindow::onConnected);
     connect(m_socket, &QTcpSocket::readyRead, this, &ConnectWindow::onReadyRead);
