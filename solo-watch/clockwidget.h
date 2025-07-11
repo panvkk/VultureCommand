@@ -15,6 +15,7 @@ public:
     explicit ClockWidget(QWidget *parent = nullptr);
     void setTime(const QTime &time);
     void startOwlAnimation();
+    void onOwlAnimationFinished();
     int getOwlY() const { return owlY; }
     void setOwlY(int y);
 
