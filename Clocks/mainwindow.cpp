@@ -142,17 +142,12 @@ void MainWindow::createMenus()
 
     // Format menu
     QMenu *formatMenu = menuBar()->addMenu(tr("Формат"));
+    QAction *numericAction = formatMenu->addAction(tr("Числовой ввод"));
+    QAction *verbalAction = formatMenu->addAction(tr("Словесный ввод"));
+    verbalAction->setVisible(false);
 
-    // Числовой формат
-    QMenu *numericMenu = formatMenu->addMenu(tr("Числовой"));
-    QAction *manualInputAction = numericMenu->addAction(tr("Вручную"));
-    connect(manualInputAction, &QAction::triggered, this, &MainWindow::showNumericTimeDialog);
-
-    QAction *timerInputAction = numericMenu->addAction(tr("Из таймера"));
-    connect(timerInputAction, &QAction::triggered, this, &MainWindow::showTimerInputDialog);
-
-    // Verbal format
-    formatMenu->addAction(tr("Словесный"), this, &MainWindow::setVerbalFormat);
+    connect(numericAction, &QAction::triggered, this, &MainWindow::showNumericTimeDialog);
+    connect(verbalAction, &QAction::triggered, this, &MainWindow::showVerbalTimeDialog);
 
     // Help menu
     QMenu *helpMenu = menuBar()->addMenu(tr("Помощь"));
@@ -326,11 +321,118 @@ void MainWindow::showTimerInputDialog()
     }
 }
 
+void MainWindow::showVerbalTimeDialog()
+{
+    bool ok;
+    QString text = QInputDialog::getText(this, tr("Словесный ввод"),
+                                         tr("Введите время словами (например, \"два часа пятнадцать минут\"):"),
+                                         QLineEdit::Normal,
+                                         "",
+                                         &ok);
+
+    if (ok && !text.isEmpty()) {
+        QTime time = parseVerbalTime(text);
+        if (time.isValid()) {
+            setCustomTime(time);
+        } else {
+            QMessageBox::warning(this, tr("Ошибка"), tr("Неверный формат времени!"));
+        }
+    }
+}
+
+QTime MainWindow::parseVerbalTime(const QString &verbalTime)
+{
+    QString input = verbalTime.toLower().simplified();
+    int hours = -1;
+    int minutes = 0;
+    int seconds = 0;
+
+    // Удаляем лишние слова
+    input.remove("ровно");
+    input.remove("часов");
+    input.remove("минут");
+    input.remove("секунд");
+
+    // Словарь числительных
+    QMap<QString, int> numbers = {
+        {"ноль", 0}, {"один", 1}, {"два", 2}, {"три", 3}, {"четыре", 4},
+        {"пять", 5}, {"шесть", 6}, {"семь", 7}, {"восемь", 8}, {"девять", 9},
+        {"десять", 10}, {"одиннадцать", 11}, {"двенадцать", 12},
+        {"тринадцать", 13}, {"четырнадцать", 14}, {"пятнадцать", 15},
+        {"шестнадцать", 16}, {"семнадцать", 17}, {"восемнадцать", 18},
+        {"девятнадцать", 19}, {"двадцать", 20}, {"тридцать", 30}, {"сорок", 40}, {"пятьдесят", 50}
+    };
+
+    // Специальные случаи
+    if (input.contains("полдень")) return QTime(12, 0);
+    if (input.contains("полночь")) return QTime(0, 0);
+
+    // Разбиваем на слова
+    QStringList words = input.split(' ', Qt::SkipEmptyParts);
+
+    // Парсим часы
+    for (int i = 0; i < words.size(); ++i) {
+        if (words[i].startsWith("час") || words[i] == "часа") {
+            if (i > 0 && numbers.contains(words[i-1])) {
+                hours = numbers[words[i-1]];
+            }
+            break;
+        }
+    }
+
+    // Если часы не найдены, берем первое число
+    if (hours == -1) {
+        for (const QString &word : words) {
+            if (numbers.contains(word)) {
+                hours = numbers[word];
+                break;
+            }
+        }
+    }
+
+    // Парсим минуты
+    bool minutesNext = false;
+    for (int i = 0; i < words.size(); ++i) {
+        if (words[i] == "и") {
+            minutesNext = true;
+            continue;
+        }
+
+        if (minutesNext || (i > 0 && words[i-1] == "и")) {
+            if (numbers.contains(words[i])) {
+                minutes = numbers[words[i]];
+            }
+            // Обработка составных чисел (двадцать пять)
+            else if (i < words.size()-1 && numbers.contains(words[i+1])) {
+                minutes = numbers[words[i]] + numbers[words[i+1]];
+                i++;
+            }
+            break;
+        }
+    }
+
+    // Коррекция формата (12/24 часа)
+    if (input.contains("вечер") || input.contains("пополудни") ||
+        input.contains("ночи") || input.contains("дня")) {
+        if (hours < 12) hours += 12;
+        if (hours == 24) hours = 0;
+    }
+
+    // Проверка валидности
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+        return QTime(); // Некорректное время
+    }
+
+    return QTime(hours, minutes, seconds);
+}
+
 void MainWindow::setCustomTime(const QTime &time)
 {
-    customTime = time;
+    QTime current = QTime::currentTime();
+    // Вычисляем разницу между текущим временем и устанавливаемым
+    timeOffset = QTime(0, 0, 0).addSecs(current.secsTo(time));
     useCustomTime = true;
-    update(); // Перерисовываем часы
+    update();
 }
 
 void MainWindow::drawSplashScreen(QPainter &painter)
@@ -521,7 +623,7 @@ void MainWindow::paintEvent(QPaintEvent *event)
     int bgY = (height() - background.height()) / 2;
     painter.drawPixmap(bgX, bgY, background);
 
-    QTime time = QTime::currentTime();
+    QTime time = useCustomTime ? customTime : QTime::currentTime();
     if ((time.hour() == 12 || time.hour() == 0) &&
         time.minute() == 0 &&
         time.second() < 30 &&
@@ -530,8 +632,7 @@ void MainWindow::paintEvent(QPaintEvent *event)
     }
     drawClockFace(painter);
 
-    // Используем customTime вместо QTime::currentTime()
-    drawClockFace(painter);
+    // Отрисовка стрелок
     drawHand(painter, customTime.hour() * 30 + customTime.minute() * 0.5, 50, 6, Qt::black);
     drawHand(painter, customTime.minute() * 6, 70, 4, Qt::blue);
     drawHand(painter, customTime.second() * 6, 80, 2, Qt::red);
@@ -554,8 +655,17 @@ void MainWindow::updateClock()
         firstUpdate = false;
     }
 
-    if (!useCustomTime) {
-        customTime = currentRealTime;
+    if (useCustomTime) {
+        // Добавляем смещение к текущему времени
+        QTime current = QTime::currentTime();
+        int totalSecs = current.hour() * 3600 + current.minute() * 60 + current.second();
+        totalSecs += timeOffset.hour() * 3600 + timeOffset.minute() * 60 + timeOffset.second();
+
+        // Нормализуем время (если вышли за 24 часа)
+        totalSecs = totalSecs % (24 * 3600);
+        customTime = QTime(0, 0, 0).addSecs(totalSecs);
+    } else {
+        customTime = QTime::currentTime();
     }
 
     // Тик-так каждую секунду

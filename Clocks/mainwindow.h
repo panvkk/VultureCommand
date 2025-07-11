@@ -62,8 +62,8 @@ private slots:
 
     void showNumericTimeDialog();
     void showTimerInputDialog();
+    void showVerbalTimeDialog();
     void setCustomTime(const QTime &time);
-
 private:
     int totalSessions = 0;
     int totalDuration = 0;
@@ -74,6 +74,11 @@ private:
     void drawHand(QPainter &painter, double angle, int length, int width, QColor color);
     void drawCuckoo(QPainter &painter, int secondsVisible);
     void drawSplashScreen(QPainter &painter);
+
+    QTime parseVerbalTime(const QString &verbalTime);
+    bool useCustomTime = false;
+    QTime customTime;
+    QTime timeOffset;
 
     QPixmap background;
     QTimer *timer;
@@ -99,9 +104,5 @@ private:
     // Current style settings
     QString currentHandStyle;
     QString currentTimeFormat;
-
-    QTime customTime;
-    QTime timeOffset;
-    bool useCustomTime = false;
 };
 #endif // MAINWINDOW_H
