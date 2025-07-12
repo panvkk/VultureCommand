@@ -120,7 +120,7 @@ void MainWindow::applyThemeStyles()
 
 void MainWindow::InitializeComponents()
 {
-    setWindowTitle("Vulture Command");
+    setWindowTitle("VultureCommandPKA");
     QRandomGenerator::securelySeeded();
     srand(time(0));
 
