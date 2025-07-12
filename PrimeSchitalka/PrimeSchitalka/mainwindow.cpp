@@ -34,6 +34,50 @@ bool isSystemDarkTheme() {
     return registry.value("AppsUseLightTheme", 1).toInt() == 0;
 }
 
+/*MainWindow::MainWindow(int participants, const QString& rhyme, const QString& clientName, QWidget *parent)
+    : QMainWindow(parent),
+    m_ui(new Ui::MainWindow),
+    m_participants(participants),
+    m_clientName(clientName)
+{
+    m_ui->setupUi(this);
+    m_rhymeWords = rhyme.split(' ', Qt::SkipEmptyParts);
+
+    // Остальная инициализация
+    m_isDarkTheme = isSystemDarkTheme();
+    applyThemeStyles();
+    srand(time(0));
+    CreateMenuBar();
+    InitializeComponents();
+    SetupCurrentRhymeWordLabel();
+    SetupRhymeTimer();
+
+    // Инициализация игры с заданными параметрами
+    InitializeGame();
+}*/
+
+MainWindow::MainWindow(int participants, const QString& rhyme, const QString& clientName, QWidget *parent)
+    : QMainWindow(parent),
+    m_ui(new Ui::MainWindow),
+    m_participants(participants),
+    m_clientName(clientName)
+{
+    m_ui->setupUi(this);
+    m_rhymeWords = rhyme.split(' ', Qt::SkipEmptyParts);
+
+    // Остальная инициализация
+    m_isDarkTheme = isSystemDarkTheme();
+    applyThemeStyles();
+    srand(time(0));
+    CreateMenuBar();
+    InitializeComponents();
+    SetupCurrentRhymeWordLabel();
+    SetupRhymeTimer();
+
+    // Не начинаем игру сразу, ждем выбора фото
+    m_ui->nextWordButton->setEnabled(false);
+}
+
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
     , m_ui(new Ui::MainWindow)
@@ -124,6 +168,7 @@ void MainWindow::InitializeComponents()
     QRandomGenerator::securelySeeded();
 
     m_nextWordButton = m_ui->nextWordButton;
+    m_nextWordButton->setEnabled(false); // Делаем кнопку неактивной по умолчанию
     connect(m_ui->nextWordButton, &QPushButton::clicked, this, &MainWindow::OnNextWordButtonClicked);
 }
 
@@ -160,6 +205,7 @@ void MainWindow::CreateMenuBar()
     setMenuBar(menuBar);
 }
 
+
 void MainWindow::SelectPhotosFolder()
 {
     QString folderPath = QFileDialog::getExistingDirectory(
@@ -179,13 +225,16 @@ void MainWindow::SelectPhotosFolder()
             QMessageBox::information(this, "Успешно",
                                      QString("Загружено %1 фотографий!").arg(m_persons.size()));
             DisplayPhotosInCircle(m_persons, true);
+            InitializeLongestWordLabel(m_rhymeWords.join(" "));
 
             selectPhotosAction->setEnabled(false);
             selectPhotosAction->setText("Фото загружены");
+
+            // Активируем кнопку только после выбора фото
+            m_ui->nextWordButton->setEnabled(true);
         }
     }
 }
-
 void MainWindow::SelectRhymesFile()
 {
     QString filePath = QFileDialog::getOpenFileName(
@@ -718,6 +767,7 @@ void MainWindow::FinishRhyme()
 {
     m_ui->nextWordButton->setEnabled(false);
     m_rhymeTimer->stop();
+
     QTimer::singleShot(1000, this, [this]() {
         RemoveCurrentPerson();
         m_currentRhymeWordLabel->hide();
@@ -725,8 +775,52 @@ void MainWindow::FinishRhyme()
         m_rhymePaused = false;
         HideAllRhymeLabels();
         m_ui->nextWordButton->setText("Start rhyme");
-        if (m_persons.size() > 1) QTimer::singleShot(1200, this, [this]() {
+
+        // Проверяем, остался ли только один участник (победитель)
+        if (m_persons.size() == 1) {
+            // Получаем текущие дату и время
+            QDateTime currentDateTime = QDateTime::currentDateTime();
+            QTime currentTime = currentDateTime.time();
+
+            // Создаем отчет о победителе
+            WinnerReport report;
+
+            // Заполняем дату выполнения считалки
+            report.day = static_cast<char>(currentDateTime.date().day());
+            report.month = static_cast<char>(currentDateTime.date().month());
+            report.year = static_cast<short>(currentDateTime.date().year());
+
+            // Заполняем время выполнения
+            report.hours = static_cast<char>(currentTime.hour());
+            report.minutes = static_cast<char>(currentTime.minute());
+            report.seconds = static_cast<char>(currentTime.second());
+
+            // Заполняем информацию об игре
+            report.participantCount = static_cast<short>(m_participants); // Сохраняем исходное количество
+            report.startingParticipant = static_cast<char>(startingParticipant); // Сохраняем начальный индекс
+
+            // Заполняем данные победителя
+            const Person& winner = m_persons.first();
+            report.winnerNumber = static_cast<char>(winner.name.toInt()); // Номер победителя
+            strncpy(report.winnerName, winner.name.toLocal8Bit().constData(), 20);
+
+            // Сохраняем текст считалки
+            QString fullRhyme = m_rhymeWords.join(" ");
+            strncpy(report.rhymeText, fullRhyme.toLocal8Bit().constData(), 240);
+
+            // Отправляем сигнал с отчетом
+            emit countingFinished(report);
+
+            // Показываем сообщение о победителе
+            QMessageBox::information(this, "Победитель",
+                                     QString("Победитель: %1").arg(winner.name));
+        }
+
+        // Если участников больше одного, продолжаем игру
+        if (m_persons.size() > 1) {
+            QTimer::singleShot(1200, this, [this]() {
                 OnPlayPauseButtonClicked();
             });
+        }
     });
 }

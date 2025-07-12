@@ -9,6 +9,7 @@
 #include <QPropertyAnimation>
 #include <QVector>
 #include "person.h"
+#include <winnerReport.h>
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWindow; }
@@ -20,7 +21,11 @@ class MainWindow : public QMainWindow
 
 public:
     explicit MainWindow(QWidget *parent = nullptr);
+    explicit MainWindow(int participants, const QString& rhyme, const QString& clientName, QWidget *parent = nullptr);
     ~MainWindow();
+
+signals:
+    void countingFinished(const WinnerReport& report);
 
 private slots:
     void OnNextWordButtonClicked();
@@ -71,6 +76,7 @@ private:
     void AnimateRemoval(QLabel* label);
     void DisplayWinnerText(QRect target, QString imagePath);
     void ShowWinnerLabel(QRect target);
+    void saveStatistics(const WinnerReport& report) const;
     void ShowVenokImage(const QString& imagePath, QRect target);
     void HideLongestWordLabel();
 
@@ -105,6 +111,9 @@ private:
     bool m_firstTime;
     bool m_longestWordShowed;
     bool m_rhymePaused;
+    int m_participants;
+    char startingParticipant;
+    QString m_clientName;
     QMenuBar* menuBar = nullptr;
     QLabel *m_highlightedLabel;
     QAction* selectPhotosAction = nullptr;

@@ -1,7 +1,7 @@
 #include <QApplication>
 #include <QStyleHints>
 #include <QSettings>
-#include "mainwindow.h"
+#include "connectwindow.h"
 
 // Функция проверки темы Windows
 bool isDarkTheme() {
@@ -33,9 +33,10 @@ int main(int argc, char *argv[]) {
     }
     QApplication::setPalette(palette);
 
-    MainWindow window;
-    window.show();
-    window.setFixedSize(750,750);
+    // Создаем и показываем окно подключения (а не главное окно)
+    ConnectWindow connectWindow;
+    connectWindow.show();
+    connectWindow.setFixedSize(400, 300); // Установите подходящий размер
+
     return app.exec();
 }
-

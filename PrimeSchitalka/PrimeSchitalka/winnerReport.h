@@ -5,7 +5,7 @@
 #include <QFile>
 
 class WinnerReport {
-private:
+public:
     // Дата: день - 1 байт, месяц - 1 байт, год - 2 байта
     char day;       // 1 байт
     char month;     // 1 байт
