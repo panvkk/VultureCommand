@@ -13,7 +13,7 @@ ConnectWindow::ConnectWindow(QWidget *parent)
     : QWidget(parent), m_socket(new QTcpSocket(this)), m_timeoutTimer(new QTimer(this))
 {
     m_surnameEdit = new QLineEdit;
-    m_ipEdit = new QLineEdit("192.168.0.101");
+    m_ipEdit = new QLineEdit("10.160.0.149");
     m_portEdit = new QLineEdit("8080");
     m_portEdit->setValidator(new QIntValidator(1, 65535, this));
     m_messageEdit = new QLineEdit;

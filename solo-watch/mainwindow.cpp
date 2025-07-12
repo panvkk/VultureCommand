@@ -36,7 +36,7 @@ void MainWindow::setupSounds() {
 
     tickSound.setVolume(0.4f);
     tackSound.setVolume(0.4f);
-    boomSound.setVolume(0.8f);
+    boomSound.setVolume(0.9f);
     cuckooSound.setVolume(0.8f);
 }
 
