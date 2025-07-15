@@ -1,0 +1,14 @@
+<RCC>
+    <qresource prefix="/">
+        <file>images/clock_face.png</file>
+        <file>images/hour_hand.png</file>
+        <file>images/minute_hand.png</file>
+        <file>images/second_hand.png</file>
+        <file>sounds/tack.wav</file>
+        <file>sounds/boom.wav</file>
+        <file>images/background.jpg</file>
+        <file>images/SOVA.png</file>
+        <file>sounds/tick.wav</file>
+        <file>sounds/cuckoo.wav</file>
+    </qresource>
+</RCC>
