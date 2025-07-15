@@ -718,7 +718,6 @@ void MainWindow::StartRhyme()
 
 void MainWindow::FinishRhyme()
 {
-    m_ui->nextWordButton->setEnabled(false);
     m_rhymeTimer->stop();
     QTimer::singleShot(1000, this, [this]() {
         RemoveCurrentPerson();
@@ -730,5 +729,6 @@ void MainWindow::FinishRhyme()
         if (m_persons.size() > 1) QTimer::singleShot(1200, this, [this]() {
                 OnPlayPauseButtonClicked();
             });
+        else m_ui->nextWordButton->setEnabled(false);
     });
 }
