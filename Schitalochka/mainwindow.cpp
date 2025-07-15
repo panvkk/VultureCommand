@@ -138,7 +138,7 @@ bool MainWindow::InitializeGame()
     mt19937 g(rd());
     shuffle(m_persons.begin(), m_persons.end(), g);
 
-    m_currentIndex = rand() % m_persons.size();
+    m_currentIndex = QRandomGenerator::global()->bounded(m_persons.size());
     DisplayPhotosInCircle(m_persons, m_firstTime);
     m_firstTime = false;
 
@@ -480,8 +480,14 @@ void MainWindow::AnimateToCenter(QLabel* label, const QRect& geometry)
 
 QString MainWindow::SelectRandomRhyme(const QVector<QString>& rhymes)
 {
-    if(rhymes.isEmpty()) return "";
-    else return rhymes[rand() % rhymes.size()];
+    if(rhymes.isEmpty())
+        return "";
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<> distr(0, rhymes.size() - 1);
+
+    return rhymes[distr(gen)];
 }
 
 QString MainWindow::FindLongestWord(const QString& rhyme)
@@ -718,7 +724,6 @@ void MainWindow::StartRhyme()
 
 void MainWindow::FinishRhyme()
 {
-    m_ui->nextWordButton->setEnabled(false);
     m_rhymeTimer->stop();
     QTimer::singleShot(1000, this, [this]() {
         RemoveCurrentPerson();
@@ -730,5 +735,6 @@ void MainWindow::FinishRhyme()
         if (m_persons.size() > 1) QTimer::singleShot(1200, this, [this]() {
                 OnPlayPauseButtonClicked();
             });
+        else m_ui->nextWordButton->setEnabled(false);
     });
 }

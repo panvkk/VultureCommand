@@ -1,13 +1,12 @@
+#include "mainwindow.h"
+
 #include <QApplication>
-#include "connectwindow.h"
 
 int main(int argc, char *argv[])
 {
     QApplication a(argc, argv);
-
-    ConnectWindow w;
+    MainWindow w;
+    w.setWindowTitle("DaliWatchesIKM");
     w.show();
-
     return a.exec();
 }
-
